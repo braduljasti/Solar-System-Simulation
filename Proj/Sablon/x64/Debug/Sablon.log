@@ -1,0 +1,12 @@
+﻿  main.cpp
+C:\Users\zabac\OneDrive\Desktop\Proj\main.cpp(567,16): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\zabac\OneDrive\Desktop\Proj\main.cpp(568,16): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\zabac\OneDrive\Desktop\Proj\main.cpp(597,21): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\zabac\OneDrive\Desktop\Proj\main.cpp(632,13): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\zabac\OneDrive\Desktop\Proj\main.cpp(633,13): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\zabac\OneDrive\Desktop\Proj\main.cpp(648,32): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\zabac\OneDrive\Desktop\Proj\main.cpp(657,24): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\zabac\OneDrive\Desktop\Proj\main.cpp(852,41): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data
+C:\Users\zabac\OneDrive\Desktop\Proj\main.cpp(851,28): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data
+C:\Users\zabac\OneDrive\Desktop\Proj\main.cpp(881,24): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+  Sablon.vcxproj -> C:\Users\zabac\OneDrive\Desktop\Proj\x64\Debug\Sablon.exe
