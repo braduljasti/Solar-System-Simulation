@@ -163,7 +163,7 @@ private:
             color = vec4(textColor, 1.0) * sampled;
         }
     )";
-
+    //comment for gitpush
 public:
     TextRenderer(const char* fontPath) {
         FT_Library ft;
