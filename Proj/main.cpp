@@ -495,7 +495,7 @@ public:
             }
         }
         else {
-            // Original code for other objects
+            
             if (obj.drawOrbit && showOrbits) {
                 glm::mat4 orbitModel = glm::scale(glm::mat4(1.0f),
                     glm::vec3(obj.orbitRadius, obj.orbitRadius, 1.0f));
@@ -604,7 +604,7 @@ void processInput(GLFWwindow* window) {
     );
     renderer->setViewMatrix(newView);
 
-    // Handle zoom with +/- keys
+    // Handle zoom 
     double mouseX, mouseY;
     glfwGetCursorPos(window, &mouseX, &mouseY);
     float ndcX = (2.0f * mouseX) / SCR_WIDTH - 1.0f;
