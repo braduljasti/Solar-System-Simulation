@@ -297,6 +297,7 @@ private:
     glm::mat4 projection;
     float currentTime;
     float& zoomLevel;
+    unsigned int plutoOrbitVAO, plutoOrbitVBO;
 
     void setupBuffers() {
         std::vector<float> circleVertices;
@@ -306,6 +307,9 @@ private:
             circleVertices.push_back(sin(angle));
         }
 
+
+
+
         glGenVertexArrays(1, &circleVAO);
         glGenBuffers(1, &circleVBO);
         glBindVertexArray(circleVAO);
@@ -314,6 +318,24 @@ private:
             circleVertices.data(), GL_STATIC_DRAW);
         glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
         glEnableVertexAttribArray(0);
+
+
+        std::vector<float> plutoOrbitVertices;
+        for (int i = 0; i <= ORBIT_RES; i++) {
+            float angle = 2.0f * PI * i / ORBIT_RES;
+            plutoOrbitVertices.push_back(5.5f * cos(angle)-1.0f);
+            plutoOrbitVertices.push_back(4.1f * 0.9f * sin(angle)+0.4f);
+        }
+
+        glGenVertexArrays(1, &plutoOrbitVAO);
+        glGenBuffers(1, &plutoOrbitVBO);
+        glBindVertexArray(plutoOrbitVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, plutoOrbitVBO);
+        glBufferData(GL_ARRAY_BUFFER, plutoOrbitVertices.size() * sizeof(float), plutoOrbitVertices.data(), GL_STATIC_DRAW);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(0);
+
+
 
         std::vector<float> ringVertices;
         for (int i = 0; i <= ORBIT_RES; i++) {
@@ -331,15 +353,20 @@ private:
         glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
         glEnableVertexAttribArray(0);
     }
-
     void drawMoon(const Moon& moon, const glm::mat4& planetModel, float time, bool showOrbits) {
         shader->use();
 
-        float moonAngle = time * moon.orbitSpeed;
-        glm::mat4 moonModel = planetModel;
-        moonModel = glm::translate(moonModel,
-            glm::vec3(moon.orbitRadius * cos(moonAngle),
-                moon.orbitRadius * sin(moonAngle), 0.0f));
+        // Use absolute angle calculation
+        float baseAngle = time * moon.orbitSpeed;
+        glm::vec3 planetPos = glm::vec3(planetModel[3]);
+
+        glm::vec3 moonOffset(
+            moon.orbitRadius * cos(baseAngle),
+            moon.orbitRadius * sin(baseAngle),
+            0.0f
+        );
+
+        glm::mat4 moonModel = glm::translate(glm::mat4(1.0f), planetPos + moonOffset);
         moonModel = glm::scale(moonModel, glm::vec3(moon.radius));
 
         shader->setMat4("model", moonModel);
@@ -348,14 +375,14 @@ private:
         glDrawArrays(GL_TRIANGLE_FAN, 0, ORBIT_RES);
 
         if (showOrbits) {
-            glm::mat4 orbitModel = planetModel;
-            orbitModel = glm::scale(orbitModel,
-                glm::vec3(moon.orbitRadius, moon.orbitRadius, 1.0f));
+            glm::mat4 orbitModel = glm::translate(glm::mat4(1.0f), planetPos);
+            orbitModel = glm::scale(orbitModel, glm::vec3(moon.orbitRadius));
             shader->setMat4("model", orbitModel);
             shader->setVec3("uCol", glm::vec3(0.2f));
             glDrawArrays(GL_LINE_LOOP, 0, ORBIT_RES);
         }
     }
+
 
     void drawRings(const SolarObject& obj, const glm::mat4& planetModel) {
         shader->use();
@@ -435,35 +462,66 @@ public:
 
     void drawObject(const SolarObject& obj, float time, bool showOrbits) {
         shader->use();
+        glBindVertexArray(circleVAO);  
 
-        if (obj.drawOrbit && showOrbits) {
-            glm::mat4 orbitModel = glm::scale(glm::mat4(1.0f),
-                glm::vec3(obj.orbitRadius, obj.orbitRadius, 1.0f));
-            shader->setMat4("model", orbitModel);
-            shader->setVec3("uCol", glm::vec3(0.3f));
-            glBindVertexArray(circleVAO);
-            glDrawArrays(GL_LINE_LOOP, 0, ORBIT_RES);
+        // Debug visibility print
+        std::cout << "Drawing " << obj.name << std::endl;
+
+        if (obj.name == "Pluto") {
+            float angle = time * obj.orbitSpeed;
+            float x = 5.5f * cos(angle) - 1.0f;
+            float y = 4.1f * 0.9f * sin(angle) + 0.4f;
+
+            if (showOrbits) {
+                shader->setMat4("model", glm::mat4(1.0f));
+                shader->setVec3("uCol", glm::vec3(0.3f));
+                glBindVertexArray(plutoOrbitVAO);
+                glDrawArrays(GL_LINE_LOOP, 0, ORBIT_RES + 1);
+                glBindVertexArray(circleVAO);
+            }
+
+            glm::mat4 baseModel = glm::translate(glm::mat4(1.0f), glm::vec3(x, y, 0.0f));
+            glm::mat4 model = glm::scale(glm::rotate(baseModel,
+                time * obj.selfRotationSpeed, glm::vec3(0.0f, 0.0f, 1.0f)),
+                glm::vec3(obj.radius));
+
+            shader->setMat4("model", model);
+            shader->setVec3("uCol", obj.color);
+            glDrawArrays(GL_TRIANGLE_FAN, 0, ORBIT_RES);
+
+            // Draw moons around Pluto's actual position
+            for (const auto& moon : obj.moons) {
+                drawMoon(moon, baseModel, time, showOrbits);
+            }
         }
+        else {
+            // Original code for other objects
+            if (obj.drawOrbit && showOrbits) {
+                glm::mat4 orbitModel = glm::scale(glm::mat4(1.0f),
+                    glm::vec3(obj.orbitRadius, obj.orbitRadius, 1.0f));
+                shader->setMat4("model", orbitModel);
+                shader->setVec3("uCol", glm::vec3(0.3f));
+                glDrawArrays(GL_LINE_LOOP, 0, ORBIT_RES);
+            }
 
-        float angle = time * obj.orbitSpeed;
-        glm::mat4 model = glm::translate(glm::mat4(1.0f),
-            glm::vec3(obj.orbitRadius * cos(angle),
-                obj.orbitRadius * sin(angle), 0.0f));
-        model = glm::rotate(model, time * obj.selfRotationSpeed,
-            glm::vec3(0.0f, 0.0f, 1.0f));
+            float angle = time * obj.orbitSpeed;
+            glm::mat4 model = glm::translate(glm::mat4(1.0f),
+                glm::vec3(obj.orbitRadius * cos(angle),
+                    obj.orbitRadius * sin(angle), 0.0f));
+            model = glm::rotate(model, time * obj.selfRotationSpeed,
+                glm::vec3(0.0f, 0.0f, 1.0f));
 
-        glm::mat4 planetModel = glm::scale(model, glm::vec3(obj.radius));
-        shader->setMat4("model", planetModel);
-        shader->setVec3("uCol", obj.color);
-        glBindVertexArray(circleVAO);
-        glDrawArrays(GL_TRIANGLE_FAN, 0, ORBIT_RES);
+            shader->setMat4("model", glm::scale(model, glm::vec3(obj.radius)));
+            shader->setVec3("uCol", obj.color);
+            glDrawArrays(GL_TRIANGLE_FAN, 0, ORBIT_RES);
 
-        for (const auto& moon : obj.moons) {
-            drawMoon(moon, model, time, showOrbits);
-        }
+            for (const auto& moon : obj.moons) {
+                drawMoon(moon, model, time, showOrbits);
+            }
 
-        if (obj.hasRings) {
-            drawRings(obj, model);
+            if (obj.hasRings) {
+                drawRings(obj, model);
+            }
         }
     }
 
@@ -626,22 +684,24 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
 
     selectedObjectInfo = "";
 
-    // Check planets and their moons
     for (const auto& obj : solarSystem) {
-        // Calculate planet's position
         float planetAngle = currentTime * obj.orbitSpeed;
-        float planetX = obj.orbitRadius * cos(planetAngle);
-        float planetY = obj.orbitRadius * sin(planetAngle);
+        float planetX, planetY;
 
-        // Check moons for this planet
+        if (obj.name == "Pluto") {
+            planetX = 5.5f * cos(planetAngle) - 1.0f;
+            planetY = 4.1f * 0.9f * sin(planetAngle) + 0.4f;
+        }
+        else {
+            planetX = obj.orbitRadius * cos(planetAngle);
+            planetY = obj.orbitRadius * sin(planetAngle);
+        }
+
         for (const auto& moon : obj.moons) {
-            float moonAngle = fmod(currentTime * moon.orbitSpeed, 2.0f * PI);  // Normalize the angle
-            // Calculate moon position relative to its planet
-            float relativeX = moon.orbitRadius * cos(moonAngle);
-            float relativeY = moon.orbitRadius * sin(moonAngle);
-            // Calculate absolute moon position
-            float moonX = planetX + relativeX;
-            float moonY = planetY + relativeY;
+            // Use same absolute angle calculation
+            float baseAngle = currentTime * moon.orbitSpeed;
+            float moonX = planetX + moon.orbitRadius * cos(baseAngle);
+            float moonY = planetY + moon.orbitRadius * sin(baseAngle);
 
             float moonDistance = sqrt(pow(worldX - moonX, 2) + pow(worldY - moonY, 2));
             float moonSelectionRadius = moon.radius * 3.5f;
@@ -652,17 +712,13 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
             }
         }
 
-        // Check planet itself
         float distance = sqrt(pow(worldX - planetX, 2) + pow(worldY - planetY, 2));
-        float selectionRadius = obj.radius * 2.5f;
-
-        if (distance < selectionRadius) {
+        if (distance < obj.radius * 2.5f) {
             selectedObjectInfo = obj.name;
             return;
         }
     }
 }
-
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
         if (!selectedObjectInfo.empty()) {
@@ -748,41 +804,68 @@ int main() {
     glfwSetWindowPos(window, windowPosX, windowPosY);
 
     solarSystem = {
-        {"Sun", 0.03f, 0.0f, 0.0f, 0.01f, {1.0f, 0.8f, 0.0f}, false,
-         "The Sun: Mass = 1.989 × 10^30 kg\nSurface Temperature: 5,778 K"},
-        {"Mercury", 0.04f, 0.4f, 0.048f, 0.1f, {0.7f, 0.7f, 0.7f}, true,
-         "Mercury: Smallest planet\nSurface Temperature: -180°C to 430°C\nNo moons"},
-        {"Venus", 0.035f, 0.6f, 0.035f, 0.01f, {0.9f, 0.7f, 0.5f}, true,
-         "Venus: Hottest planet\nRotates backwards\nThick atmosphere of CO2"},
-        {"Earth", 0.04f, 0.9f, 0.029f, 0.01f, {0.2f, 0.5f, 1.0f}, true,
-         "Earth: Our home planet\nOnly known planet with life\nAge: 4.54 billion years",
-         false, 0.0f, 0.0f, {0.0f, 0.0f, 0.0f},
-         {{"Moon", 0.01f, 0.08f, 0.1f, {0.8f, 0.8f, 0.8f},
-         "Earth's Moon\nDistance: 384,400 km\nAge: 4.51 billion years"}}},
-        {"Mars", 0.03f, 1.4f, 0.024f, 0.01f, {1.0f, 0.4f, 0.0f}, true,
-         "Mars: The Red Planet\nHas the largest volcano\nTwo moons"},
-        {"Jupiter", 0.08f, 1.8f, 0.013f, 0.01f, {0.8f, 0.7f, 0.6f}, true,
-         "Jupiter: Largest planet\nGreat Red Spot is a giant storm\n79 known moons",
-         false, 0.0f, 0.0f, {0.0f, 0.0f, 0.0f},
-         {{"Io", 0.015f, 0.12f, 0.15f, {1.0f, 1.0f, 0.6f},
-         "Io: Most volcanic body in solar system\nSurface temperature: -130°C to -150°C"},
-         {"Europa", 0.014f, 0.15f, 0.12f, {0.9f, 0.9f, 0.9f},
-         "Europa: Smooth ice surface\nPossibly contains subsurface ocean"},
-         {"Ganymede", 0.018f, 0.18f, 0.10f, {0.8f, 0.8f, 0.7f},
-         "Ganymede: Largest moon in solar system\nHas its own magnetic field"},
-         {"Callisto", 0.016f, 0.21f, 0.08f, {0.6f, 0.6f, 0.6f},
-         "Callisto: Most heavily cratered object\nPossibly has subsurface ocean"}}},
-        {"Saturn", 0.07f, 2.4f, 0.009f, 0.01f, {0.9f, 0.8f, 0.5f}, true,
-         "Saturn: Known for its rings\nLeast dense planet\n82 known moons",
-         true, 0.1f, 0.15f, {0.8f, 0.8f, 0.6f},
-         {{"Titan", 0.016f, 0.25f, 0.08f, {0.8f, 0.7f, 0.5f},
-         "Titan: Largest of Saturn's moons\nThick atmosphere\nLiquid surface lakes"},
-         {"Rhea", 0.01f, 0.2f, 0.1f, {0.7f, 0.7f, 0.7f},
-         "Rhea: Second largest moon of Saturn\nIcy composition\nOxygen atmosphere"}}},
-        {"Uranus", 0.05f, 2.8f, 0.006f, 0.01f, {0.5f, 0.8f, 0.8f}, true,
-         "Uranus: Ice giant\nRotates on its side\n27 known moons"},
-        {"Neptune", 0.05f, 3.7f, 0.005f, 0.01f, {0.0f, 0.0f, 0.8f}, true,
-         "Neptune: Windiest planet\nDarkest ring system\n14 known moons"}
+       {"Sun", 0.03f, 0.0f, 0.0f, 0.01f, {1.0f, 0.8f, 0.0f}, false,
+        "The Sun: Mass = 1.989 × 10^30 kg\nSurface Temperature: 5,778 K"},
+       {"Mercury", 0.04f, 0.4f, 0.048f, 0.1f, {0.7f, 0.7f, 0.7f}, true,
+        "Mercury: Smallest planet\nSurface Temperature: -180°C to 430°C\nNo moons"},
+       {"Venus", 0.035f, 0.6f, 0.035f, 0.01f, {0.9f, 0.7f, 0.5f}, true,
+        "Venus: Hottest planet\nRotates backwards\nThick atmosphere of CO2"},
+       {"Earth", 0.04f, 0.9f, 0.029f, 0.01f, {0.2f, 0.5f, 1.0f}, true,
+        "Earth: Our home planet\nOnly known planet with life\nAge: 4.54 billion years",
+        false, 0.0f, 0.0f, {0.0f, 0.0f, 0.0f},
+        {{"Moon", 0.01f, 0.08f, 0.1f, {0.8f, 0.8f, 0.8f},
+        "Earth's Moon\nDistance: 384,400 km\nAge: 4.51 billion years"}}},
+       {"Mars", 0.03f, 1.4f, 0.024f, 0.01f, {1.0f, 0.4f, 0.0f}, true,
+        "Mars: The Red Planet\nHas the largest volcano\nTwo moons",
+        false, 0.0f, 0.0f, {0.0f, 0.0f, 0.0f},
+        {{"Phobos", 0.005f, 0.06f, 0.2f, {0.6f, 0.6f, 0.6f}, "Phobos: Largest moon of Mars\nIrregular shape\nOrbits close to surface"},
+         {"Deimos", 0.003f, 0.08f, 0.15f, {0.5f, 0.5f, 0.5f}, "Deimos: Smaller moon of Mars\nSmooth surface\nSlow orbit"}}},
+       {"Jupiter", 0.08f, 1.8f, 0.013f, 0.01f, {0.8f, 0.7f, 0.6f}, true,
+        "Jupiter: Largest planet\nGreat Red Spot is a giant storm\n79 known moons",
+        false, 0.0f, 0.0f, {0.0f, 0.0f, 0.0f},
+        {{"Io", 0.015f, 0.12f, 0.15f, {1.0f, 1.0f, 0.6f},
+        "Io: Most volcanic body in solar system\nSurface temperature: -130°C to -150°C"},
+        {"Europa", 0.014f, 0.15f, 0.12f, {0.9f, 0.9f, 0.9f},
+        "Europa: Smooth ice surface\nPossibly contains subsurface ocean"},
+        {"Ganymede", 0.018f, 0.18f, 0.10f, {0.8f, 0.8f, 0.7f},
+        "Ganymede: Largest moon in solar system\nHas its own magnetic field"},
+        {"Callisto", 0.016f, 0.21f, 0.08f, {0.6f, 0.6f, 0.6f},
+        "Callisto: Most heavily cratered object\nPossibly has subsurface ocean"}}},
+       {"Saturn", 0.07f, 2.4f, 0.009f, 0.01f, {0.9f, 0.8f, 0.5f}, true,
+        "Saturn: Known for its rings\nLeast dense planet\n82 known moons",
+        true, 0.1f, 0.15f, {0.8f, 0.8f, 0.6f},
+        {{"Titan", 0.016f, 0.25f, 0.08f, {0.8f, 0.7f, 0.5f},
+        "Titan: Dense atmosphere\nLiquid methane lakes\nEarth-like features"},
+        {"Rhea", 0.01f, 0.2f, 0.1f, {0.7f, 0.7f, 0.7f},
+        "Rhea: Saturn's 2nd largest\nWater ice surface\nThin atmosphere"},
+        {"Enceladus", 0.008f, 0.17f, 0.12f, {1.0f, 1.0f, 1.0f},
+        "Enceladus: Ice geysers\nSubsurface ocean\nActive geology"},
+        {"Iapetus", 0.012f, 0.23f, 0.09f, {0.5f, 0.5f, 0.5f},
+        "Iapetus: Two-toned surface\nEquatorial ridge\nWalnut shape"}}},
+       {"Uranus", 0.05f, 2.8f, 0.006f, 0.01f, {0.5f, 0.8f, 0.8f}, true,
+        "Uranus: Ice giant\nRotates on its side\n27 known moons",
+        false, 0.0f, 0.0f, {0.0f, 0.0f, 0.0f},
+        {{"Titania", 0.012f, 0.16f, 0.11f, {0.7f, 0.7f, 0.7f},
+        "Titania: Largest Uranian moon\nScarped valleys\nIcy surface"},
+        {"Oberon", 0.011f, 0.19f, 0.09f, {0.6f, 0.6f, 0.6f},
+        "Oberon: Outermost major moon\nCraters with dark floors\nOld surface"},
+        {"Miranda", 0.008f, 0.13f, 0.13f, {0.8f, 0.8f, 0.8f},
+        "Miranda: Dramatic cliffs\nUnique surface features\nYoung terrain"}}},
+       {"Neptune", 0.05f, 3.7f, 0.005f, 0.01f, {0.0f, 0.0f, 0.8f}, true,
+        "Neptune: Windiest planet\nDarkest ring system\n14 known moons",
+        false, 0.0f, 0.0f, {0.0f, 0.0f, 0.0f},
+        {{"Triton", 0.014f, 0.22f, -0.07f, {0.9f, 0.9f, 1.0f},
+        "Triton: Retrograde orbit\nNitrogen geysers\nFrozen surface"},
+        {"Nereid", 0.006f, 0.28f, 0.05f, {0.7f, 0.7f, 0.8f},
+        "Nereid: Irregular orbit\nCapture theory\nDark surface"}}},
+        // Add to solarSystem array before the last closing brace:
+{"Pluto", 0.02f, 5.5f, 0.004f, 0.01f, {0.8f, 0.7f, 0.7f}, true,
+ "Pluto: Dwarf planet\nCrosses Neptune's orbit\n5 known moons",
+ false, 0.0f, 0.0f, {0.0f, 0.0f, 0.0f},
+ {{"Charon", 0.01f, 0.05f, 0.08f, {0.7f, 0.7f, 0.7f},
+ "Charon: Largest moon of Pluto\nTidally locked\nIcy surface"},
+ {"Nix", 0.003f, 0.07f, 0.1f, {0.6f, 0.6f, 0.6f},
+ "Nix: Small irregular moon\nRapid rotation\nHighly reflective"}}}
     };
 
     renderer = std::make_unique<Renderer>(zoomLevel);
