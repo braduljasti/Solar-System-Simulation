@@ -1,2 +1,3 @@
 C:\Users\zabac\OneDrive\Desktop\Proj\x64\Debug\glew32.dll
 C:\Users\zabac\OneDrive\Desktop\skibidi\Solar-System-Simulation\Proj\x64\Debug\glew32.dll
+C:\Users\zabac\OneDrive\Desktop\skibidi2\Solar-System-Simulation\Proj\x64\Debug\glew32.dll

@@ -13,6 +13,8 @@
 #include <ft2build.h>
 #include FT_FREETYPE_H
 #include <map>
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
 
 const unsigned int SCR_WIDTH = 1920;
 const unsigned int SCR_HEIGHT = 1040;
@@ -23,27 +25,68 @@ const int ORBIT_RES = 100;
 const char* vertexShaderSource = R"(
     #version 330 core
     layout (location = 0) in vec2 aPos;
+    layout (location = 1) in vec3 aNormal;
+    layout (location = 2) in vec2 aTexCoords;
+    
+    out vec3 FragPos;
+    out vec3 Normal;
+    out vec2 TexCoords;
     
     uniform mat4 model;
     uniform mat4 view;
     uniform mat4 projection;
     
     void main() {
-        gl_Position = projection * view * model * vec4(aPos, 0.0, 1.0);
+        FragPos = vec3(model * vec4(aPos.x, aPos.y, 0.0, 1.0));
+        Normal = mat3(transpose(inverse(model))) * aNormal;
+        TexCoords = aTexCoords;
+        gl_Position = projection * view * model * vec4(aPos.x, aPos.y, 0.0, 1.0);
     }
 )";
 
 const char* fragmentShaderSource = R"(
     #version 330 core
+    in vec3 FragPos;
+    in vec3 Normal;
+    in vec2 TexCoords;
+    
     uniform vec3 uCol;
+    uniform vec3 lightPos;
+    uniform float ambientStrength;
+    uniform bool isLightSource;
+    uniform sampler2D texture1;
+    uniform bool useTexture;
+    
     out vec4 FragColor;
     
     void main() {
-        FragColor = vec4(uCol, 1.0);
+        vec3 result;
+        if (isLightSource) {
+            if(useTexture) {
+                // For the Sun, blend the texture with the base color
+                vec4 texColor = texture(texture1, TexCoords);
+                result = uCol * texColor.rgb;
+            } else {
+                result = uCol;
+            }
+        } else {
+            vec3 ambient = ambientStrength * uCol;
+            vec3 norm = normalize(Normal);
+            vec3 lightDir = normalize(lightPos - FragPos);
+            float diff = max(dot(norm, lightDir), 0.0);
+            vec3 diffuse = diff * uCol;
+            
+            if(useTexture) {
+                vec4 texColor = texture(texture1, TexCoords);
+                result = (ambient + diffuse) * texColor.rgb;
+            } else {
+                result = ambient + diffuse;
+            }
+        }
+        
+        FragColor = vec4(result, 1.0);
     }
-)";
-
-struct Character {
+)"; struct Character {
     unsigned int TextureID;
     glm::ivec2   Size;
     glm::ivec2   Bearing;
@@ -74,6 +117,7 @@ struct Moon {
     float orbitRadius;
     float orbitSpeed;
     glm::vec3 color;
+    std::string texture;
     std::string info;
 };
 
@@ -132,13 +176,16 @@ public:
         glAttachShader(ID, vertex);
         glAttachShader(ID, fragment);
         glLinkProgram(ID);
+        use();
+        glUniform1i(glGetUniformLocation(ID, "texture1"), 0);
         checkCompileErrors(ID, "PROGRAM");
 
         glDeleteShader(vertex);
         glDeleteShader(fragment);
     }
-
-    void use() { glUseProgram(ID); }
+    void use() {
+        glUseProgram(ID);
+    }
 
     void setMat4(const char* name, const glm::mat4& mat) {
         glUniformMatrix4fv(glGetUniformLocation(ID, name), 1, GL_FALSE, glm::value_ptr(mat));
@@ -148,7 +195,23 @@ public:
         glUniform3fv(glGetUniformLocation(ID, name), 1, glm::value_ptr(value));
     }
 
-    unsigned int getId() const { return ID; }
+
+
+    void setFloat(const char* name, float value) {
+        glUniform1f(glGetUniformLocation(ID, name), value);
+    }
+
+    void setBool(const char* name, bool value) {
+        glUniform1i(glGetUniformLocation(ID, name), value);
+    }
+
+    unsigned int getId() const {
+        return ID;
+    }
+
+    ~Shader() {
+        glDeleteProgram(ID);
+    }
 };
 
 class TextRenderer {
@@ -319,16 +382,30 @@ private:
     unsigned int plutoOrbitVAO, plutoOrbitVBO;
     std::vector<AsteroidBelt> asteroidBelts;
     unsigned int asteroidVAO, asteroidVBO;
-
+    std::map<std::string, unsigned int> textures;
 
     void setupBuffers() {
-        std::vector<float> circleVertices;
-        for (int i = 0; i < ORBIT_RES; i++) {
-            float angle = 2.0f * PI * i / ORBIT_RES;
-            circleVertices.push_back(cos(angle));
-            circleVertices.push_back(sin(angle));
-        }
 
+
+        std::vector<float> circleVertices;
+        for (int i = 0; i <= ORBIT_RES; i++) {  
+            float angle = 2.0f * PI * i / ORBIT_RES;
+            float x = cos(angle);
+            float y = sin(angle);
+            float u = angle / (2.0f * PI);  // Better texture coordinate calculation
+            float v = 0.5f + y * 0.5f;      // Map y to [0,1]
+
+            // Position
+            circleVertices.push_back(x);
+            circleVertices.push_back(y);
+            // Normal
+            circleVertices.push_back(x);
+            circleVertices.push_back(y);
+            circleVertices.push_back(0.0f);
+            // Texture coords
+            circleVertices.push_back(u);
+            circleVertices.push_back(v);
+        }
 
 
 
@@ -338,33 +415,61 @@ private:
         glBindBuffer(GL_ARRAY_BUFFER, circleVBO);
         glBufferData(GL_ARRAY_BUFFER, circleVertices.size() * sizeof(float),
             circleVertices.data(), GL_STATIC_DRAW);
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+
+        // Position attribute
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)0);
         glEnableVertexAttribArray(0);
+        // Normal attribute
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(float),
+            (void*)(2 * sizeof(float)));
+        glEnableVertexAttribArray(1);
+        // Texture coords attribute
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 7 * sizeof(float),
+            (void*)(5 * sizeof(float)));
+        glEnableVertexAttribArray(2);
+    
 
 
         std::vector<float> plutoOrbitVertices;
         for (int i = 0; i <= ORBIT_RES; i++) {
             float angle = 2.0f * PI * i / ORBIT_RES;
-            plutoOrbitVertices.push_back(5.5f * cos(angle)-1.0f);
-            plutoOrbitVertices.push_back(4.1f * 0.9f * sin(angle)+0.4f);
-        }
+            float x = 5.5f * cos(angle) - 1.0f;
+            float y = 4.1f * 0.9f * sin(angle) + 0.4f;
 
+            plutoOrbitVertices.push_back(x);
+            plutoOrbitVertices.push_back(y);
+            float len = sqrt(x * x + y * y);
+            plutoOrbitVertices.push_back(x / len);
+            plutoOrbitVertices.push_back(y / len);
+            plutoOrbitVertices.push_back(0.0f);
+        }
         glGenVertexArrays(1, &plutoOrbitVAO);
         glGenBuffers(1, &plutoOrbitVBO);
         glBindVertexArray(plutoOrbitVAO);
         glBindBuffer(GL_ARRAY_BUFFER, plutoOrbitVBO);
-        glBufferData(GL_ARRAY_BUFFER, plutoOrbitVertices.size() * sizeof(float), plutoOrbitVertices.data(), GL_STATIC_DRAW);
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+        glBufferData(GL_ARRAY_BUFFER, plutoOrbitVertices.size() * sizeof(float),
+            plutoOrbitVertices.data(), GL_STATIC_DRAW);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
         glEnableVertexAttribArray(0);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float),
+            (void*)(2 * sizeof(float)));
+        glEnableVertexAttribArray(1);
 
 
 
         std::vector<float> ringVertices;
         for (int i = 0; i <= ORBIT_RES; i++) {
             float angle = 2.0f * PI * i / ORBIT_RES;
-            ringVertices.push_back(cos(angle));
-            ringVertices.push_back(sin(angle));
+            float x = cos(angle);
+            float y = sin(angle);
+
+            ringVertices.push_back(x);
+            ringVertices.push_back(y);
+            ringVertices.push_back(x);
+            ringVertices.push_back(y);
+            ringVertices.push_back(0.0f);
         }
+
 
         glGenVertexArrays(1, &ringVAO);
         glGenBuffers(1, &ringVBO);
@@ -372,31 +477,41 @@ private:
         glBindBuffer(GL_ARRAY_BUFFER, ringVBO);
         glBufferData(GL_ARRAY_BUFFER, ringVertices.size() * sizeof(float),
             ringVertices.data(), GL_STATIC_DRAW);
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
         glEnableVertexAttribArray(0);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float),
+            (void*)(2 * sizeof(float)));
+        glEnableVertexAttribArray(1);
 
         std::vector<float> asteroidVertices;
         for (int i = 0; i < ORBIT_RES / 2; i++) {
             float angle = 2.0f * PI * i / (ORBIT_RES / 2);
-            asteroidVertices.push_back(cos(angle));
-            asteroidVertices.push_back(sin(angle));
-        }
+            float x = cos(angle);
+            float y = sin(angle);
 
+            asteroidVertices.push_back(x);
+            asteroidVertices.push_back(y);
+            asteroidVertices.push_back(x);
+            asteroidVertices.push_back(y);
+            asteroidVertices.push_back(0.0f);
+        }
         glGenVertexArrays(1, &asteroidVAO);
         glGenBuffers(1, &asteroidVBO);
         glBindVertexArray(asteroidVAO);
         glBindBuffer(GL_ARRAY_BUFFER, asteroidVBO);
         glBufferData(GL_ARRAY_BUFFER, asteroidVertices.size() * sizeof(float),
             asteroidVertices.data(), GL_STATIC_DRAW);
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
         glEnableVertexAttribArray(0);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float),
+            (void*)(2 * sizeof(float)));
+        glEnableVertexAttribArray(1);
 
 
     }
     void drawMoon(const Moon& moon, const glm::mat4& planetModel, float time, bool showOrbits) {
         shader->use();
 
-        
         float baseAngle = time * moon.orbitSpeed;
         glm::vec3 planetPos = glm::vec3(planetModel[3]);
 
@@ -407,10 +522,29 @@ private:
         );
 
         glm::mat4 moonModel = glm::translate(glm::mat4(1.0f), planetPos + moonOffset);
+
+        
+        moonModel = glm::rotate(moonModel, time * moon.orbitSpeed * 5.0f,
+            glm::vec3(0.0f, 0.0f, 1.0f));
+
         moonModel = glm::scale(moonModel, glm::vec3(moon.radius));
 
         shader->setMat4("model", moonModel);
         shader->setVec3("uCol", moon.color);
+
+        std::string lowercaseTexName = moon.name;
+        std::transform(lowercaseTexName.begin(), lowercaseTexName.end(),
+            lowercaseTexName.begin(), ::tolower);
+
+        if (textures.find(moon.name) != textures.end()) {
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, textures[moon.name]);
+            shader->setBool("useTexture", true);
+        }
+        else {
+            shader->setBool("useTexture", false);
+        }
+
         glBindVertexArray(circleVAO);
         glDrawArrays(GL_TRIANGLE_FAN, 0, ORBIT_RES);
 
@@ -424,12 +558,46 @@ private:
     }
 
 
+    unsigned int loadTexture(const char* path) {
+        std::cout << "Attempting to load texture: " << path << std::endl;
+        unsigned int textureID;
+        glGenTextures(1, &textureID);
+
+        int width, height, nrChannels;
+        stbi_set_flip_vertically_on_load(true);
+        unsigned char* data = stbi_load(path, &width, &height, &nrChannels, 0);
+
+        if (data) {
+            std::cout << "Successfully loaded texture: " << path << " (" << width << "x" << height << ", " << nrChannels << " channels)" << std::endl;
+            GLenum format = (nrChannels == 4) ? GL_RGBA : GL_RGB;
+
+            glBindTexture(GL_TEXTURE_2D, textureID);
+            glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+            glGenerateMipmap(GL_TEXTURE_2D);
+
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        }
+        else {
+            std::cout << "Failed to load texture: " << path << "\nError: " << stbi_failure_reason() << std::endl;
+        }
+
+        stbi_image_free(data);
+        return textureID;
+    }
+
+
     void drawRings(const SolarObject& obj, const glm::mat4& planetModel) {
         shader->use();
+        shader->setVec3("lightPos", glm::vec3(0.0f, 0.0f, 0.0f));
+        shader->setFloat("ambientStrength", 0.1f);
+        shader->setBool("isLightSource", false);
         glm::mat4 ringModel = planetModel;
         ringModel = glm::rotate(ringModel, currentTime * 0.1f, glm::vec3(0.0f, 0.0f, 1.0f));
 
-        glBindVertexArray(circleVAO);
+        glBindVertexArray(ringVAO);
         glLineWidth(2.0f);
 
         
@@ -445,7 +613,6 @@ private:
             {1.0f, 1.3f, 20},  //  outer ring
         };
 
-        // Draw each ring section
         for (const auto& section : sections) {
             float ringStep = (section.endRadius - section.startRadius) / section.numRings;
 
@@ -466,7 +633,6 @@ private:
                 glDrawArrays(GL_LINE_LOOP, 0, ORBIT_RES);
             }
 
-            // Add black rings in each section
             int blackRings = section.numRings / 4;
             float blackRingStep = (section.endRadius - section.startRadius) / blackRings;
 
@@ -505,23 +671,74 @@ public:
         shader->setMat4("projection", projection);
     }
 
+    void loadTextures() {
+        const std::vector<std::string> objectNames = {
+            "sun", "mercury", "venus", "earth", "mars", "phobos", "deimos",
+            "jupiter",  "europa", "ganymede", "callisto", "io",
+            "saturn", "enceladus", "tethys", "rhea", "titan", "iapetus",
+            "uranus", "miranda", "titania", "oberon",
+            "neptune",  "triton",
+            "pluto", "eris", "moon", "nix", "dysnomia", "phobos", "deimos", "charon"
+        };
+
+        for (const auto& name : objectNames) {
+            std::string path = "textures/" + name + ".jpg";
+            unsigned int textureID = loadTexture(path.c_str());
+            std::string objName = name;
+            objName[0] = std::toupper(objName[0]);  // Capitalize first letter for SolarObject name match
+            textures[objName] = textureID;
+        }
+    }
+
     void drawObject(const SolarObject& obj, float time, bool showOrbits) {
         shader->use();
+        shader->setVec3("lightPos", glm::vec3(0.0f, 0.0f, 0.0f));
+        shader->setBool("isLightSource", obj.name == "Sun");
         glBindVertexArray(circleVAO);
 
+       
+        if (obj.name == "Sun") {
+            shader->setFloat("ambientStrength", 1.0f);  // Full brightness for the Sun
+
+            // Apply Sun texture if available
+            if (textures.find("Sun") != textures.end()) {
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, textures["Sun"]);
+                shader->setBool("useTexture", true);
+            }
+            else {
+                shader->setBool("useTexture", false);
+            }
+        }
+        else {
+            shader->setFloat("ambientStrength", 0.1f);
+
+            if (textures.find(obj.name) != textures.end()) {
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, textures[obj.name]);
+                shader->setBool("useTexture", true);
+                shader->setFloat("ambientStrength", 0.5f);
+            }
+            else {
+                shader->setBool("useTexture", false);
+            }
+        }
+
+        // Handle Pluto and Eris (elliptical orbits)
         if (obj.name == "Pluto" || obj.name == "Eris") {
             float angle = time * obj.orbitSpeed;
             float x, y;
 
             if (obj.name == "Pluto") {
                 x = 40.5f * cos(angle) + 4.0f;
-                y = 50.1f * 0.9f * sin(angle) -16.4f;
+                y = 50.1f * 0.9f * sin(angle) - 16.4f;
             }
-            else if (obj.name == "Eris") {
+            else { // Eris
                 x = 85.2f * cos(angle) - 26.0f;
-                y = 46.8f * 0.85f * sin(angle) +7.0f;
+                y = 46.8f * 0.85f * sin(angle) + 7.0f;
             }
 
+            // Draw orbit path if enabled
             if (showOrbits) {
                 shader->setMat4("model", glm::mat4(1.0f));
                 shader->setVec3("uCol", glm::vec3(0.3f));
@@ -535,7 +752,7 @@ public:
                     }
                     else {
                         orbitVertices.push_back(85.2f * cos(a) - 26.0f);
-                        orbitVertices.push_back(46.8f * 0.85f * sin(a) +7.0f);
+                        orbitVertices.push_back(46.8f * 0.85f * sin(a) + 7.0f);
                     }
                 }
 
@@ -553,20 +770,24 @@ public:
                 glBindVertexArray(circleVAO);
             }
 
+            // Draw the planet
             glm::mat4 baseModel = glm::translate(glm::mat4(1.0f), glm::vec3(x, y, 0.0f));
-            glm::mat4 model = glm::scale(glm::rotate(baseModel, time * obj.selfRotationSpeed, glm::vec3(0.0f, 0.0f, 1.0f)), glm::vec3(obj.radius));
+            glm::mat4 model = glm::scale(
+                glm::rotate(baseModel, time * obj.selfRotationSpeed, glm::vec3(0.0f, 0.0f, 1.0f)),
+                glm::vec3(obj.radius)
+            );
 
             shader->setMat4("model", model);
             shader->setVec3("uCol", obj.color);
             glDrawArrays(GL_TRIANGLE_FAN, 0, ORBIT_RES);
 
+            // Draw moons
             for (const auto& moon : obj.moons) {
                 drawMoon(moon, baseModel, time, showOrbits);
             }
         }
         else {
-            
-            
+            // Regular circular orbits for other planets
             if (obj.drawOrbit && showOrbits) {
                 glm::mat4 orbitModel = glm::scale(glm::mat4(1.0f),
                     glm::vec3(obj.orbitRadius, obj.orbitRadius, 1.0f));
@@ -586,14 +807,20 @@ public:
             shader->setVec3("uCol", obj.color);
             glDrawArrays(GL_TRIANGLE_FAN, 0, ORBIT_RES);
 
+            // Draw moons
             for (const auto& moon : obj.moons) {
                 drawMoon(moon, model, time, showOrbits);
             }
 
+            // Draw rings if the planet has them
             if (obj.hasRings) {
                 drawRings(obj, model);
             }
         }
+
+        // Reset texture state
+        glBindTexture(GL_TEXTURE_2D, 0);
+        shader->setBool("useTexture", false);
     }
 
     void initializeAsteroidBelts() {
@@ -636,6 +863,10 @@ public:
 
     void drawAsteroidBelts(float time) {
         shader->use();
+        shader->setVec3("lightPos", glm::vec3(0.0f, 0.0f, 0.0f));
+        shader->setFloat("ambientStrength", 0.5f);  // Increased ambient light for better visibility
+        shader->setBool("isLightSource", false);
+        shader->setBool("useTexture", false);  
         glBindVertexArray(asteroidVAO);
 
         for (const auto& belt : asteroidBelts) {
@@ -677,6 +908,8 @@ public:
         glDeleteBuffers(1, &ringVBO);
         glDeleteVertexArrays(1, &asteroidVAO);
         glDeleteBuffers(1, &asteroidVBO);
+        glDeleteVertexArrays(1, &plutoOrbitVAO);
+        glDeleteBuffers(1, &plutoOrbitVBO);
     }
 };
 
@@ -1009,7 +1242,7 @@ int main() {
         false, 0.0f, 0.0f, {0.0f, 0.0f, 0.0f},
         {{"Moon", 0.0189f, 0.12f, 0.1f, {0.8f, 0.8f, 0.8f},
         "Earth's Moon\nDistance: 384,400 km\nAge: 4.51 billion years"}}},
-       {"Mars", 0.0371f, 1.52f, 0.024f, 0.01f, {1.0f, 0.4f, 0.0f}, true,
+       {"Mars", 0.0371f, 1.52f, 0.024f, 1.01f, {1.0f, 0.4f, 0.0f}, true,
         "Mars: The Red Planet\nHas the largest volcano\nTwo moons",
         false, 0.0f, 0.0f, {0.0f, 0.0f, 0.0f},
         {{"Phobos", 0.0007f, 0.06f, 0.2f, {0.6f, 0.6f, 0.6f}, "Phobos: Largest moon of Mars\nIrregular shape\nOrbits close to surface"},
@@ -1073,7 +1306,7 @@ int main() {
     renderer = std::make_unique<Renderer>(zoomLevel);
     renderer->initializeAsteroidBelts();
     double lastFrame = glfwGetTime();
-   
+    renderer->loadTextures();
 
     while (!glfwWindowShouldClose(window)) {
         double currentFrame = glfwGetTime();

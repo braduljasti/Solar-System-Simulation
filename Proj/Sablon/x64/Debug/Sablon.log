@@ -1,14 +1,14 @@
 ﻿  main.cpp
-C:\Users\zabac\OneDrive\Desktop\skibidi\Solar-System-Simulation\Proj\main.cpp(748,16): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-C:\Users\zabac\OneDrive\Desktop\skibidi\Solar-System-Simulation\Proj\main.cpp(749,16): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-C:\Users\zabac\OneDrive\Desktop\skibidi\Solar-System-Simulation\Proj\main.cpp(780,16): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-C:\Users\zabac\OneDrive\Desktop\skibidi\Solar-System-Simulation\Proj\main.cpp(781,16): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-C:\Users\zabac\OneDrive\Desktop\skibidi\Solar-System-Simulation\Proj\main.cpp(792,21): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-C:\Users\zabac\OneDrive\Desktop\skibidi\Solar-System-Simulation\Proj\main.cpp(835,13): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-C:\Users\zabac\OneDrive\Desktop\skibidi\Solar-System-Simulation\Proj\main.cpp(836,13): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-C:\Users\zabac\OneDrive\Desktop\skibidi\Solar-System-Simulation\Proj\main.cpp(880,32): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-C:\Users\zabac\OneDrive\Desktop\skibidi\Solar-System-Simulation\Proj\main.cpp(889,24): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-C:\Users\zabac\OneDrive\Desktop\skibidi\Solar-System-Simulation\Proj\main.cpp(1125,41): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data
-C:\Users\zabac\OneDrive\Desktop\skibidi\Solar-System-Simulation\Proj\main.cpp(1124,28): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data
-C:\Users\zabac\OneDrive\Desktop\skibidi\Solar-System-Simulation\Proj\main.cpp(1154,24): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
-  Sablon.vcxproj -> C:\Users\zabac\OneDrive\Desktop\skibidi\Solar-System-Simulation\Proj\x64\Debug\Sablon.exe
+C:\Users\zabac\OneDrive\Desktop\skibidi2\Solar-System-Simulation\Proj\main.cpp(984,16): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\zabac\OneDrive\Desktop\skibidi2\Solar-System-Simulation\Proj\main.cpp(985,16): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\zabac\OneDrive\Desktop\skibidi2\Solar-System-Simulation\Proj\main.cpp(1016,16): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\zabac\OneDrive\Desktop\skibidi2\Solar-System-Simulation\Proj\main.cpp(1017,16): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\zabac\OneDrive\Desktop\skibidi2\Solar-System-Simulation\Proj\main.cpp(1028,21): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\zabac\OneDrive\Desktop\skibidi2\Solar-System-Simulation\Proj\main.cpp(1071,13): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\zabac\OneDrive\Desktop\skibidi2\Solar-System-Simulation\Proj\main.cpp(1072,13): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\zabac\OneDrive\Desktop\skibidi2\Solar-System-Simulation\Proj\main.cpp(1116,32): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\zabac\OneDrive\Desktop\skibidi2\Solar-System-Simulation\Proj\main.cpp(1125,24): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\zabac\OneDrive\Desktop\skibidi2\Solar-System-Simulation\Proj\main.cpp(1361,41): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data
+C:\Users\zabac\OneDrive\Desktop\skibidi2\Solar-System-Simulation\Proj\main.cpp(1360,28): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data
+C:\Users\zabac\OneDrive\Desktop\skibidi2\Solar-System-Simulation\Proj\main.cpp(1390,24): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+  Sablon.vcxproj -> C:\Users\zabac\OneDrive\Desktop\skibidi2\Solar-System-Simulation\Proj\x64\Debug\Sablon.exe
