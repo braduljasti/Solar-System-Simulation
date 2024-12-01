@@ -23,70 +23,122 @@ const int ORBIT_RES = 100;
 
 // Shader sources
 const char* vertexShaderSource = R"(
-    #version 330 core
-    layout (location = 0) in vec2 aPos;
-    layout (location = 1) in vec3 aNormal;
-    layout (location = 2) in vec2 aTexCoords;
+
+
+
+#version 330 core
+layout (location = 0) in vec2 aPos;
+layout (location = 1) in vec3 aNormal;
+layout (location = 2) in vec2 aTexCoords;
+
+out vec3 FragPos;
+out vec3 Normal;
+out vec2 TexCoords;
+
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+
+void main() {
+   
+    vec3 pos3D;
+    float r = 1.0; // unit sphere radius
+    pos3D.x = aPos.x;
+    pos3D.y = aPos.y;
+  
+    pos3D.z = sqrt(max(0.0, r*r - aPos.x*aPos.x - aPos.y*aPos.y));
+
+  
+    Normal = normalize(vec3(aPos.x, aPos.y, pos3D.z));
     
-    out vec3 FragPos;
-    out vec3 Normal;
-    out vec2 TexCoords;
+   
+    mat3 normalMatrix = mat3(transpose(inverse(model)));
+    Normal = normalize(normalMatrix * Normal);
+
+    FragPos = vec3(model * vec4(aPos.x, aPos.y, pos3D.z, 1.0));
     
-    uniform mat4 model;
-    uniform mat4 view;
-    uniform mat4 projection;
-    
-    void main() {
-        FragPos = vec3(model * vec4(aPos.x, aPos.y, 0.0, 1.0));
-        Normal = mat3(transpose(inverse(model))) * aNormal;
-        TexCoords = aTexCoords;
-        gl_Position = projection * view * model * vec4(aPos.x, aPos.y, 0.0, 1.0);
-    }
+    TexCoords = aTexCoords;
+    gl_Position = projection * view * model * vec4(aPos.x, aPos.y, pos3D.z, 1.0);
+}
+
+
+
 )";
 
 const char* fragmentShaderSource = R"(
-    #version 330 core
-    in vec3 FragPos;
-    in vec3 Normal;
-    in vec2 TexCoords;
-    
-    uniform vec3 uCol;
-    uniform vec3 lightPos;
-    uniform float ambientStrength;
-    uniform bool isLightSource;
-    uniform sampler2D texture1;
-    uniform bool useTexture;
-    
-    out vec4 FragColor;
-    
-    void main() {
-        vec3 result;
-        if (isLightSource) {
-            if(useTexture) {
-                // For the Sun, blend the texture with the base color
-                vec4 texColor = texture(texture1, TexCoords);
-                result = uCol * texColor.rgb;
-            } else {
-                result = uCol;
-            }
+#version 330 core
+in vec3 FragPos;
+in vec3 Normal;
+in vec2 TexCoords;
+
+uniform vec3 uCol;
+uniform vec3 lightPos;
+uniform float ambientStrength;
+uniform bool isLightSource;
+uniform sampler2D texture1;
+uniform bool useTexture;
+
+out vec4 FragColor;
+
+void main() {
+    if (isLightSource) {
+        if(useTexture) {
+            vec4 texColor = texture(texture1, TexCoords);
+            FragColor = vec4(uCol * texColor.rgb, 1.0);
         } else {
-            vec3 ambient = ambientStrength * uCol;
-            vec3 norm = normalize(Normal);
-            vec3 lightDir = normalize(lightPos - FragPos);
-            float diff = max(dot(norm, lightDir), 0.0);
-            vec3 diffuse = diff * uCol;
-            
-            if(useTexture) {
-                vec4 texColor = texture(texture1, TexCoords);
-                result = (ambient + diffuse) * texColor.rgb;
-            } else {
-                result = ambient + diffuse;
-            }
+            FragColor = vec4(uCol, 1.0);
         }
-        
-        FragColor = vec4(result, 1.0);
+        return;
     }
-)"; struct Character {
+
+   
+    vec3 lightDir = normalize(lightPos - FragPos);
+    
+   
+    float diff = max(dot(Normal, lightDir), 0.0);
+    
+    
+    float distance = length(lightPos - FragPos);
+    float attenuation = 1.0 / (1.0 + 0.0009 * distance);
+    
+   
+    vec3 baseColor;
+    if(useTexture) {
+        baseColor = texture(texture1, TexCoords).rgb;
+    } else {
+        baseColor = uCol;
+    }
+    
+   
+    float darkSideAmbient = max(ambientStrength * 0.2, 0.08); // Reduced from 0.3 and 0.15
+    
+   
+    vec3 ambient = darkSideAmbient * baseColor;
+    vec3 diffuse = diff * baseColor * 1.3; // Increased diffuse intensity for stronger contrast
+    
+   
+    float shadowFactor = smoothstep(0.0, 0.2, diff); // Reduced transition range from 0.3 to 0.2
+    
+  
+    vec3 result = (ambient + (diffuse * attenuation * shadowFactor)) * baseColor;
+    
+   
+    float rim = 1.0 - max(dot(Normal, normalize(-FragPos)), 0.0);
+    rim = smoothstep(0.6, 1.0, rim);
+    vec3 rimColor = baseColor * rim * 0.25;
+    
+    result += rimColor;
+    
+    
+    result = max(result, baseColor * 0.1); // Reduced from 0.2 to 0.1
+    
+   
+    result = min(result, vec3(1.0));
+    
+    FragColor = vec4(result, 1.0);
+}
+)";
+struct Character {
     unsigned int TextureID;
     glm::ivec2   Size;
     glm::ivec2   Bearing;
@@ -383,29 +435,41 @@ private:
     std::vector<AsteroidBelt> asteroidBelts;
     unsigned int asteroidVAO, asteroidVBO;
     std::map<std::string, unsigned int> textures;
+    bool simulationPaused;
+    float timeScale;
 
     void setupBuffers() {
 
 
         std::vector<float> circleVertices;
-        for (int i = 0; i <= ORBIT_RES; i++) {  
+        for (int i = 0; i <= ORBIT_RES; i++) {
             float angle = 2.0f * PI * i / ORBIT_RES;
             float x = cos(angle);
             float y = sin(angle);
-            float u = angle / (2.0f * PI);  // Better texture coordinate calculation
-            float v = 0.5f + y * 0.5f;      // Map y to [0,1]
+
+           
+            float r = sqrt(x * x + y * y);  
+            float u = (x / r + 1.0f) * 0.5f;
+            float v = (y / r + 1.0f) * 0.5f;
+
+          
+            float len = sqrt(x * x + y * y);  
+            float nx = x / len;  
+            float ny = y / len;  
+            float nz = 0.0f;     
 
             // Position
             circleVertices.push_back(x);
             circleVertices.push_back(y);
             // Normal
-            circleVertices.push_back(x);
-            circleVertices.push_back(y);
-            circleVertices.push_back(0.0f);
+            circleVertices.push_back(nx);
+            circleVertices.push_back(ny);
+            circleVertices.push_back(nz);
             // Texture coords
             circleVertices.push_back(u);
             circleVertices.push_back(v);
         }
+
 
 
 
@@ -433,9 +497,8 @@ private:
         std::vector<float> plutoOrbitVertices;
         for (int i = 0; i <= ORBIT_RES; i++) {
             float angle = 2.0f * PI * i / ORBIT_RES;
-            float x = 5.5f * cos(angle) - 1.0f;
-            float y = 4.1f * 0.9f * sin(angle) + 0.4f;
-
+            float x = 16.5f * cos(angle) - 3.0f;  // Tripled from 5.5f
+            float y = 12.3f * 0.9f * sin(angle) + 1.2f;  // Tripled from 4.1f
             plutoOrbitVertices.push_back(x);
             plutoOrbitVertices.push_back(y);
             float len = sqrt(x * x + y * y);
@@ -488,12 +551,25 @@ private:
             float angle = 2.0f * PI * i / (ORBIT_RES / 2);
             float x = cos(angle);
             float y = sin(angle);
+            float u = angle / (2.0f * PI);  
+            float v = 0.5f + y * 0.5f;      
 
+            // Calculate proper normal for lighting
+            float len = sqrt(x * x + y * y);
+            float nx = x / len;
+            float ny = y / len;
+            float nz = 0.0f;
+
+            // Position
             asteroidVertices.push_back(x);
             asteroidVertices.push_back(y);
-            asteroidVertices.push_back(x);
-            asteroidVertices.push_back(y);
-            asteroidVertices.push_back(0.0f);
+            // Normal
+            asteroidVertices.push_back(nx);
+            asteroidVertices.push_back(ny);
+            asteroidVertices.push_back(nz);
+            // Texture coordinates
+            asteroidVertices.push_back(u);
+            asteroidVertices.push_back(v);
         }
         glGenVertexArrays(1, &asteroidVAO);
         glGenBuffers(1, &asteroidVBO);
@@ -501,12 +577,12 @@ private:
         glBindBuffer(GL_ARRAY_BUFFER, asteroidVBO);
         glBufferData(GL_ARRAY_BUFFER, asteroidVertices.size() * sizeof(float),
             asteroidVertices.data(), GL_STATIC_DRAW);
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)0);
         glEnableVertexAttribArray(0);
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float),
-            (void*)(2 * sizeof(float)));
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)(2 * sizeof(float)));
         glEnableVertexAttribArray(1);
-
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)(5 * sizeof(float)));
+        glEnableVertexAttribArray(2);
 
     }
     void drawMoon(const Moon& moon, const glm::mat4& planetModel, float time, bool showOrbits) {
@@ -587,30 +663,42 @@ private:
         stbi_image_free(data);
         return textureID;
     }
-
-
     void drawRings(const SolarObject& obj, const glm::mat4& planetModel) {
         shader->use();
         shader->setVec3("lightPos", glm::vec3(0.0f, 0.0f, 0.0f));
         shader->setFloat("ambientStrength", 0.1f);
         shader->setBool("isLightSource", false);
-        glm::mat4 ringModel = planetModel;
-        ringModel = glm::rotate(ringModel, currentTime * 0.1f, glm::vec3(0.0f, 0.0f, 1.0f));
 
+        static std::vector<float> initialAngles;
+        static bool initialized = false;
+
+        // Initialize angles only once
+        if (!initialized) {
+            initialAngles.clear();
+            for (int i = 0; i < 600; i++) {
+                initialAngles.push_back((static_cast<float>(rand()) / RAND_MAX) * 2.0f * PI);
+            }
+            initialized = true;
+        }
+
+        // Draw rings
         glBindVertexArray(ringVAO);
         glLineWidth(2.0f);
 
-        
         struct RingSection {
             float startRadius;
             float endRadius;
             int numRings;
+            int numMeteors;
+            float meteorSize;
+            glm::vec3 baseColor;
+            std::string meteorTexture;  // Added texture field
         };
 
         std::vector<RingSection> sections = {
-            {0.7f, 0.8f, 15},  //  inner ring
-            {0.8f, 1.0f, 8},   //  middle section
-            {1.0f, 1.3f, 20},  //  outer ring
+            {0.4f, 0.6f, 15, 200, 0.008f, glm::vec3(0.9f, 0.8f, 0.6f), "Meteor"},      // Original meteors
+            {0.6f, 0.8f, 7, 150, 0.007f, glm::vec3(0.8f, 0.7f, 0.5f), "Meteors"},      // New meteors type
+            {0.8f, 1.0f, 20, 250, 0.006f, glm::vec3(0.7f, 0.6f, 0.4f), "Meteorss"}     // Another new meteors type
         };
 
         for (const auto& section : sections) {
@@ -625,7 +713,7 @@ private:
                 );
 
                 float radius = section.startRadius + i * ringStep;
-                glm::mat4 currentRingModel = ringModel;
+                glm::mat4 currentRingModel = planetModel;
                 currentRingModel = glm::scale(currentRingModel, glm::vec3(radius));
 
                 shader->setMat4("model", currentRingModel);
@@ -638,7 +726,7 @@ private:
 
             for (int i = 0; i < blackRings; i++) {
                 float radius = section.startRadius + i * blackRingStep;
-                glm::mat4 currentRingModel = ringModel;
+                glm::mat4 currentRingModel = planetModel;
                 currentRingModel = glm::scale(currentRingModel, glm::vec3(radius));
 
                 shader->setMat4("model", currentRingModel);
@@ -647,14 +735,52 @@ private:
             }
         }
 
+        glBindVertexArray(circleVAO);
+        int meteorCounter = 0;
+
+        glm::vec3 saturnPos = glm::vec3(planetModel[3]);
+        float rotationSpeed = 0.25f;
+        float currentRotation = simulationPaused ? currentTime : (currentTime * timeScale);
+
+        for (const auto& section : sections) {
+            // Set texture for current meteor type
+            if (textures.find(section.meteorTexture) != textures.end()) {
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, textures[section.meteorTexture]);
+                shader->setBool("useTexture", true);
+            }
+
+            for (int i = 0; i < section.numMeteors; i++) {
+                float radius = section.startRadius +
+                    (static_cast<float>(i) / section.numMeteors) * (section.endRadius - section.startRadius);
+
+                float baseAngle = initialAngles[meteorCounter++];
+                float angle = baseAngle + (currentRotation * rotationSpeed);
+
+                float meteorX = saturnPos.x + radius * cos(angle);
+                float meteorY = saturnPos.y + radius * sin(angle);
+
+                glm::mat4 meteorModel = glm::mat4(1.0f);
+                meteorModel = glm::translate(meteorModel, glm::vec3(meteorX, meteorY, saturnPos.z));
+                meteorModel = glm::scale(meteorModel, glm::vec3(section.meteorSize));
+                meteorModel = glm::rotate(meteorModel, angle, glm::vec3(0.0f, 0.0f, 1.0f));
+
+                shader->setMat4("model", meteorModel);
+                shader->setVec3("uCol", glm::vec3(1.0f));
+                glDrawArrays(GL_TRIANGLE_FAN, 0, ORBIT_RES);
+            }
+        }
+
+        glBindTexture(GL_TEXTURE_2D, 0);
+        shader->setBool("useTexture", false);
         glLineWidth(1.0f);
     }
-
 public:
     void setCurrentTime(float time) { currentTime = time; }
     const glm::mat4& getCurrentView() const { return view; }
-
-    Renderer(float& zoomRef) : zoomLevel(zoomRef) {
+    void setSimulationPaused(bool paused) { simulationPaused = paused; }
+    void setTimeScale(float scale) { timeScale = scale; }
+    Renderer(float& zoomRef) : zoomLevel(zoomRef), simulationPaused(false), timeScale(1.0f) {
         shader = std::make_unique<Shader>(vertexShaderSource, fragmentShaderSource);
         setupBuffers();
 
@@ -678,14 +804,14 @@ public:
             "saturn", "enceladus", "tethys", "rhea", "titan", "iapetus",
             "uranus", "miranda", "titania", "oberon",
             "neptune",  "triton",
-            "pluto", "eris", "moon", "nix", "dysnomia", "phobos", "deimos", "charon"
+            "pluto", "eris", "moon", "nix", "dysnomia", "phobos", "deimos", "charon", "asteroid", "meteor", "meteors", "meteorss"
         };
 
         for (const auto& name : objectNames) {
             std::string path = "textures/" + name + ".jpg";
             unsigned int textureID = loadTexture(path.c_str());
             std::string objName = name;
-            objName[0] = std::toupper(objName[0]);  // Capitalize first letter for SolarObject name match
+            objName[0] = std::toupper(objName[0]); 
             textures[objName] = textureID;
         }
     }
@@ -694,13 +820,15 @@ public:
         shader->use();
         shader->setVec3("lightPos", glm::vec3(0.0f, 0.0f, 0.0f));
         shader->setBool("isLightSource", obj.name == "Sun");
+
         glBindVertexArray(circleVAO);
 
-       
-        if (obj.name == "Sun") {
-            shader->setFloat("ambientStrength", 1.0f);  // Full brightness for the Sun
 
-            // Apply Sun texture if available
+     
+        if (obj.name == "Sun") {
+            shader->setFloat("ambientStrength", 1.0f);  
+
+            
             if (textures.find("Sun") != textures.end()) {
                 glActiveTexture(GL_TEXTURE0);
                 glBindTexture(GL_TEXTURE_2D, textures["Sun"]);
@@ -724,18 +852,18 @@ public:
             }
         }
 
-        // Handle Pluto and Eris (elliptical orbits)
+        
         if (obj.name == "Pluto" || obj.name == "Eris") {
             float angle = time * obj.orbitSpeed;
             float x, y;
 
             if (obj.name == "Pluto") {
-                x = 40.5f * cos(angle) + 4.0f;
-                y = 50.1f * 0.9f * sin(angle) - 16.4f;
+                x = 121.5f * cos(angle) + 12.0f;  
+                y = 150.3f * 0.9f * sin(angle) - 49.2f; 
             }
             else { // Eris
-                x = 85.2f * cos(angle) - 26.0f;
-                y = 46.8f * 0.85f * sin(angle) + 7.0f;
+                x = 255.6f * cos(angle) - 78.0f;  
+                y = 140.4f * 0.85f * sin(angle) + 21.0f;  
             }
 
             // Draw orbit path if enabled
@@ -747,12 +875,12 @@ public:
                 for (int i = 0; i <= ORBIT_RES; i++) {
                     float a = 2.0f * PI * i / ORBIT_RES;
                     if (obj.name == "Pluto") {
-                        orbitVertices.push_back(40.5f * cos(a) + 4.0f);
-                        orbitVertices.push_back(50.1f * 0.9f * sin(a) - 16.4f);
+                        orbitVertices.push_back(121.5f * cos(a) + 12.0f); 
+                        orbitVertices.push_back(150.3f * 0.9f * sin(a) - 49.2f);  
                     }
                     else {
-                        orbitVertices.push_back(85.2f * cos(a) - 26.0f);
-                        orbitVertices.push_back(46.8f * 0.85f * sin(a) + 7.0f);
+                        orbitVertices.push_back(255.6f * cos(a) - 78.0f);  
+                        orbitVertices.push_back(140.4f * 0.85f * sin(a) + 21.0f);  
                     }
                 }
 
@@ -770,7 +898,7 @@ public:
                 glBindVertexArray(circleVAO);
             }
 
-            // Draw the planet
+           
             glm::mat4 baseModel = glm::translate(glm::mat4(1.0f), glm::vec3(x, y, 0.0f));
             glm::mat4 model = glm::scale(
                 glm::rotate(baseModel, time * obj.selfRotationSpeed, glm::vec3(0.0f, 0.0f, 1.0f)),
@@ -781,13 +909,13 @@ public:
             shader->setVec3("uCol", obj.color);
             glDrawArrays(GL_TRIANGLE_FAN, 0, ORBIT_RES);
 
-            // Draw moons
+           
             for (const auto& moon : obj.moons) {
                 drawMoon(moon, baseModel, time, showOrbits);
             }
         }
         else {
-            // Regular circular orbits for other planets
+           
             if (obj.drawOrbit && showOrbits) {
                 glm::mat4 orbitModel = glm::scale(glm::mat4(1.0f),
                     glm::vec3(obj.orbitRadius, obj.orbitRadius, 1.0f));
@@ -807,29 +935,29 @@ public:
             shader->setVec3("uCol", obj.color);
             glDrawArrays(GL_TRIANGLE_FAN, 0, ORBIT_RES);
 
-            // Draw moons
+           
             for (const auto& moon : obj.moons) {
                 drawMoon(moon, model, time, showOrbits);
             }
 
-            // Draw rings if the planet has them
+         
             if (obj.hasRings) {
                 drawRings(obj, model);
             }
         }
 
-        // Reset texture state
+       
         glBindTexture(GL_TEXTURE_2D, 0);
         shader->setBool("useTexture", false);
     }
 
     void initializeAsteroidBelts() {
-        // Main Asteroid Belt after Mars before Jupiter
+       
         AsteroidBelt mainBelt{
             "Main Asteroid Belt",
-            2.1f,  // minRadius 
-            3.3f,  // maxRadius
-            1000,   // numAsteroids
+            6.3f,  // minRadius 
+            9.9f,  // maxRadius
+            3000,   // numAsteroids
             {},    // asteroids vector
             glm::vec3(0.6f, 0.6f, 0.6f),  // color
             "Main Asteroid Belt\nLocated between Mars and Jupiter\nContains millions of asteroids"
@@ -838,8 +966,8 @@ public:
         // Kuiper Belt which is beyond Neptune
         AsteroidBelt kuiperBelt{
             "Kuiper Belt",
-            46.0f,  // minRadius 
-             66.0f,  // maxRadius
+            138.0f,  // minRadius 
+             198.0f,  // maxRadius
             15000,   // numAsteroids
             {},    // asteroids vector
             glm::vec3(0.4f, 0.4f, 0.4f),  // color
@@ -864,9 +992,16 @@ public:
     void drawAsteroidBelts(float time) {
         shader->use();
         shader->setVec3("lightPos", glm::vec3(0.0f, 0.0f, 0.0f));
-        shader->setFloat("ambientStrength", 0.5f);  // Increased ambient light for better visibility
+        shader->setFloat("ambientStrength", 0.5f);
         shader->setBool("isLightSource", false);
-        shader->setBool("useTexture", false);  
+
+        // Apply asteroid texture
+        if (textures.find("Asteroid") != textures.end()) {
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, textures["Asteroid"]);
+            shader->setBool("useTexture", true);
+        }
+
         glBindVertexArray(asteroidVAO);
 
         for (const auto& belt : asteroidBelts) {
@@ -878,12 +1013,21 @@ public:
                 glm::mat4 model = glm::translate(glm::mat4(1.0f),
                     glm::vec3(asteroid.orbitRadius * cos(angle),
                         asteroid.orbitRadius * sin(angle), 0.0f));
+
+                // Add rotation for variety in texture orientation
+                model = glm::rotate(model, angle * 0.5f + asteroid.orbitOffset,
+                    glm::vec3(0.0f, 0.0f, 1.0f));
+
                 model = glm::scale(model, glm::vec3(asteroid.size));
 
                 shader->setMat4("model", model);
                 glDrawArrays(GL_TRIANGLE_FAN, 0, ORBIT_RES / 2);
             }
         }
+
+      
+        glBindTexture(GL_TEXTURE_2D, 0);
+        shader->setBool("useTexture", false);
     }
 
     const std::vector<AsteroidBelt>& getAsteroidBelts() const {
@@ -926,8 +1070,8 @@ std::unique_ptr<TextRenderer> textRenderer;
 double lastMouseX = 0, lastMouseY = 0;
 float currentTime = 0.0f;
 float zoomLevel = 20.0f;
-const float MIN_ZOOM = 0.1f;
-const float MAX_ZOOM = 75.0f;
+const float MIN_ZOOM = 0.2f;
+const float MAX_ZOOM = 150.0f;
 std::unique_ptr<Renderer> renderer = nullptr;
 glm::mat4 view;
 glm::vec3 cameraPosition(0.0f, 0.0f, zoomLevel);
@@ -985,10 +1129,10 @@ void processInput(GLFWwindow* window) {
         glfwGetKey(window, GLFW_KEY_MINUS) == GLFW_PRESS) {
 
         if (glfwGetKey(window, GLFW_KEY_EQUAL) == GLFW_PRESS) {
-            zoomLevel = clamp(zoomLevel - 0.5f, MIN_ZOOM, MAX_ZOOM);
+            zoomLevel = clamp(zoomLevel - 0.3f, MIN_ZOOM, MAX_ZOOM);
         }
         if (glfwGetKey(window, GLFW_KEY_MINUS) == GLFW_PRESS) {
-            zoomLevel = clamp(zoomLevel + 0.5f, MIN_ZOOM, MAX_ZOOM);
+            zoomLevel = clamp(zoomLevel + 0.3f, MIN_ZOOM, MAX_ZOOM);
         }
 
         cameraPosition.z = zoomLevel;
@@ -1022,7 +1166,7 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
     float worldY = ndcY * worldScale + cameraTarget.y;
 
     // Calculate zoom factor
-    float zoomDelta = yoffset * 1.5f;
+    float zoomDelta = yoffset * 1.0f;
     float oldZoom = zoomLevel;
     zoomLevel = clamp(zoomLevel - zoomDelta, MIN_ZOOM, MAX_ZOOM);
     float zoomFactor = zoomLevel / oldZoom;
@@ -1049,14 +1193,49 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
     if (action == GLFW_PRESS) {
         switch (key) {
-        case GLFW_KEY_SPACE: simulationPaused = !simulationPaused; break;
-        case GLFW_KEY_O: showOrbits = !showOrbits; break;
-        case GLFW_KEY_1: timeScale = 0.5f; break;
-        case GLFW_KEY_2: timeScale = 1.0f; break;
-        case GLFW_KEY_3: timeScale = 2.0f; break;
-        case GLFW_KEY_4: timeScale = 5.0f; break;
-        case GLFW_KEY_5: timeScale = 10.0f; break;
-        case GLFW_KEY_6: timeScale = 20.0f; break;
+        case GLFW_KEY_SPACE:
+            simulationPaused = !simulationPaused;
+            renderer->setSimulationPaused(simulationPaused);  
+            break;
+        case GLFW_KEY_O:
+            showOrbits = !showOrbits;
+            break;
+        case GLFW_KEY_1:
+            timeScale = 0.5f;
+            renderer->setTimeScale(timeScale);  
+            break;
+        case GLFW_KEY_2:
+            timeScale = 1.0f;
+            renderer->setTimeScale(timeScale);  
+            break;
+        case GLFW_KEY_3:
+            timeScale = 2.0f;
+            renderer->setTimeScale(timeScale); 
+            break;
+        case GLFW_KEY_4:
+            timeScale = 5.0f;
+            renderer->setTimeScale(timeScale); 
+            break;
+        case GLFW_KEY_5:
+            timeScale = 10.0f;
+            renderer->setTimeScale(timeScale); 
+            break;
+        case GLFW_KEY_6:
+            timeScale = 20.0f;
+            renderer->setTimeScale(timeScale); 
+            break;
+        case GLFW_KEY_F: // Reset camera to look at sun
+            cameraPosition = glm::vec3(0.0f, 0.0f, zoomLevel);
+            cameraTarget = glm::vec3(0.0f, 0.0f, 0.0f);
+            if (renderer) {
+                glm::mat4 newView = glm::lookAt(
+                    cameraPosition,
+                    cameraTarget,
+                    glm::vec3(0.0f, 1.0f, 0.0f)
+                );
+                renderer->setViewMatrix(newView);
+            }
+            break;
         }
     }
 }
@@ -1092,12 +1271,12 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
         float planetX, planetY;
 
         if (obj.name == "Pluto") {
-            planetX = 40.5f * cos(planetAngle) + 4.0f;
-            planetY =50.1f * 0.9f * sin(planetAngle) - 16.4f;
+            planetX = 121.5f * cos(planetAngle) + 12.0f;  
+            planetY = 150.3f * 0.9f * sin(planetAngle) - 49.2f;  
         }
         else if (obj.name == "Eris") {
-            planetX = 85.2f * cos(planetAngle) - 26.0f;
-            planetY = 46.8f * 0.85f * sin(planetAngle) + 7.0f;
+            planetX = 255.6f * cos(planetAngle) - 78.0f;  
+            planetY = 140.4f * 0.85f * sin(planetAngle) + 21.0f;  
         }
         else {
             planetX = obj.orbitRadius * cos(planetAngle);
@@ -1229,80 +1408,97 @@ int main() {
 
     textRenderer = std::make_unique<TextRenderer>("C:/Windows/Fonts/arial.ttf");
     glfwSetWindowPos(window, windowPosX, windowPosY);
-
     solarSystem = {
-       {"Sun", 0.07f, 0.0f, 0.0f, 0.01f, {1.0f, 0.8f, 0.0f}, false,
-        "The Sun: Mass = 1.989 × 10^30 kg\nSurface Temperature: 5,778 K"},
-       {"Mercury", 0.0273f, 0.39f, 0.048f, 0.1f, {0.7f, 0.7f, 0.7f}, true,
-        "Mercury: Smallest planet\nSurface Temperature: -180°C to 430°C\nNo moons"},
-       {"Venus", 0.0665f, 0.72f, 0.035f, 0.01f, {0.9f, 0.7f, 0.5f}, true,
-        "Venus: Hottest planet\nRotates backwards\nThick atmosphere of CO2"},
-       {"Earth", 0.07f, 1.0f, 0.029f, 0.01f, {0.2f, 0.5f, 1.0f}, true,
-        "Earth: Our home planet\nOnly known planet with life\nAge: 4.54 billion years",
-        false, 0.0f, 0.0f, {0.0f, 0.0f, 0.0f},
-        {{"Moon", 0.0189f, 0.12f, 0.1f, {0.8f, 0.8f, 0.8f},
-        "Earth's Moon\nDistance: 384,400 km\nAge: 4.51 billion years"}}},
-       {"Mars", 0.0371f, 1.52f, 0.024f, 1.01f, {1.0f, 0.4f, 0.0f}, true,
-        "Mars: The Red Planet\nHas the largest volcano\nTwo moons",
-        false, 0.0f, 0.0f, {0.0f, 0.0f, 0.0f},
-        {{"Phobos", 0.0007f, 0.06f, 0.2f, {0.6f, 0.6f, 0.6f}, "Phobos: Largest moon of Mars\nIrregular shape\nOrbits close to surface"},
-         {"Deimos", 0.000644f, 0.08f, 0.15f, {0.5f, 0.5f, 0.5f}, "Deimos: Smaller moon of Mars\nSmooth surface\nSlow orbit"}}},
-       {"Jupiter", 0.784f, 5.2f, 0.013f, 0.01f, {0.8f, 0.7f, 0.6f}, true,
-        "Jupiter: Largest planet\nGreat Red Spot is a giant storm\n79 known moons",
-        false, 0.0f, 0.0f, {0.0f, 0.0f, 0.0f},
-        {{"Io", 0.02002f, 1.0f, 0.15f, {1.0f, 1.0f, 0.6f},
-        "Io: Most volcanic body in solar system\nSurface temperature: -130°C to -150°C"},
-        {"Europa", 0.01715f, 1.2f, 0.12f, {0.9f, 0.9f, 0.9f},
-        "Europa: Smooth ice surface\nPossibly contains subsurface ocean"},
-        {"Ganymede", 0.02891f, 1.4f, 0.10f, {0.8f, 0.8f, 0.7f},
-        "Ganymede: Largest moon in solar system\nHas its own magnetic field"},
-        {"Callisto", 0.02646f, 1.6f, 0.08f, {0.6f, 0.6f, 0.6f},
-        "Callisto: Most heavily cratered object\nPossibly has subsurface ocean"}}},
-       {"Saturn", 0.6398f, 9.58f, 0.009f, 0.01f, {0.9f, 0.8f, 0.5f}, true,
-        "Saturn: Known for its rings\nLeast dense planet\n82 known moons",
-        true, 0.7f, 1.3f, {0.8f, 0.8f, 0.6f},
-        {
-        {"Enceladus", 0.0002772f, 1.4f, 0.12f, {1.0f, 1.0f, 1.0f},
-        "Enceladus: Ice geysers\nSubsurface ocean\nActive geology"},
-        {"Tethys", 0.00581f, 1.55f, 0.12f, {1.0f, 1.0f, 1.0f},
-        "Tethys: Ice geysers\nSubsurface ocean\nActive geology"},
-        {"Rhea", 0.0084f, 1.7f, 0.1f, {0.7f, 0.7f, 0.7f},
-        "Rhea: Saturn's 2nd largest\nWater ice surface\nThin atmosphere"},
-        {"Titan", 0.02828f, 1.85f, 0.08f, {0.8f, 0.7f, 0.5f},
-        "Titan: Dense atmosphere\nLiquid methane lakes\nEarth-like features"},
+        // Sun
+        {"Sun", 0.5f, 0.0f, 0.0f, 0.28f * (365.26 / 27), {1.0f, 0.8f, 0.0f}, false,
+         "The Sun: Mass = 1.989 × 10^30 kg\nSurface Temperature: 5,778 K"},
 
-        {"Iapetus", 0.00805f, 2.1f, 0.09f, {0.5f, 0.5f, 0.5f},
-        "Iapetus: Two-toned surface\nEquatorial ridge\nWalnut shape"}}},
-       {"Uranus", 0.28f, 19.22f, 0.006f, 0.01f, {0.5f, 0.8f, 0.8f}, true,
-        "Uranus: Ice giant\nRotates on its side\n27 known moons",
-        false, 0.0f, 0.0f, {0.0f, 0.0f, 0.0f},
-        {{"Miranda", 0.00259f, 0.35f, 0.13f, {0.8f, 0.8f, 0.8f},
-        "Miranda: Dramatic cliffs\nUnique surface features\nYoung terrain"},
-            {"Titania", 0.00861f, 0.46f, 0.11f, {0.7f, 0.7f, 0.7f},
-        "Titania: Largest Uranian moon\nScarped valleys\nIcy surface"},
-        {"Oberon", 0.0084f, 0.52f, 0.09f, {0.6f, 0.6f, 0.6f},
-        "Oberon: Outermost major moon\nCraters with dark floors\nOld surface"}
-        }},
-       {"Neptune", 0.2716f, 30.05f, 0.005f, 0.01f, {0.0f, 0.0f, 0.8f}, true,
-        "Neptune: Windiest planet\nDarkest ring system\n14 known moons",
-        false, 0.0f, 0.0f, {0.0f, 0.0f, 0.0f},
-        {{"Triton", 0.01484f, 0.41f, -0.07f, {0.9f, 0.9f, 1.0f},
-        "Triton: Retrograde orbit\nNitrogen geysers\nFrozen surface"},
-       }},
-{"Pluto", 0.0133f, 78.48f, 0.004f, 0.01f, {0.8f, 0.7f, 0.7f}, true,
- "Pluto: Dwarf planet\nCrosses Neptune's orbit\n5 known moons",
- false, 0.0f, 0.0f, {0.0f, 0.0f, 0.0f},
- {{"Charon", 0.01f, 0.05f, 0.08f, {0.7f, 0.7f, 0.7f},
- "Charon: Largest moon of Pluto\nTidally locked\nIcy surface"},
- {"Nix", 0.003f, 0.07f, 0.1f, {0.6f, 0.6f, 0.6f},
- "Nix: Small irregular moon\nRapid rotation\nHighly reflective"}}},
-{"Eris", 0.01274f, 68.7f, 0.003f, 0.01f, {0.85f, 0.85f, 0.85f}, true,
- "Eris: Largest dwarf planet\nMore massive than Pluto\nHighly eccentric orbit",
- false, 0.0f, 0.0f, {0.0f, 0.0f, 0.0f},
- {{"Dysnomia", 0.005f, 0.04f, 0.09f, {0.6f, 0.6f, 0.6f},
- "Dysnomia: Only known moon of Eris\nNamed after daughter of Eris\nDiameter ~700km"}}}
+         // Mercury (0.387 * 3.0)
+         {"Mercury", 0.027f, 1.5461f, 0.0712f, 0.0294f, {0.7f, 0.7f, 0.7f}, true,
+          "Mercury: Smallest planet\nSurface Temperature: -180°C to 430°C\nNo moons"},
+
+          // Venus (0.723 * 3.0)
+          {"Venus", 0.067f, 2.169f, 0.0279f, -0.0071f, {0.9f, 0.7f, 0.5f}, true,
+           "Venus: Hottest planet\nRotates backwards\nThick atmosphere of CO2"},
+
+           // Earth now at 3.0
+           {"Earth", 0.07f, 3.0f, 0.0172f, 6.28f, {0.2f, 0.5f, 1.0f}, true,
+            "Earth: Our home planet\nOnly known planet with life\nAge: 4.54 billion years",
+            false, 0.0f, 0.0f, {0.0f, 0.0f, 0.0f},
+            {{"Moon", 0.019f, 0.18f, 0.1f, {0.8f, 0.8f, 0.8f},
+              "Earth's Moon\nDistance: 384,400 km\nAge: 4.51 billion years"}}},
+
+              // Mars (1.524 * 3.0)
+              {"Mars", 0.037f, 4.572f, 0.0091f, 6.10f, {1.0f, 0.4f, 0.0f}, true,
+               "Mars: The Red Planet\nHas the largest volcano\nTwo moons",
+               false, 0.0f, 0.0f, {0.0f, 0.0f, 0.0f},
+               {{"Phobos", 0.005f, 0.09f, 0.2f, {0.6f, 0.6f, 0.6f},
+                 "Phobos: Largest moon of Mars\nIrregular shape\nOrbits close to surface"},
+                {"Deimos", 0.003f, 0.12f, 0.15f, {0.5f, 0.5f, 0.5f},
+                 "Deimos: Smaller moon of Mars\nSmooth surface\nSlow orbit"}}},
+
+                 // Jupiter (5.203 * 3.0)
+                 {"Jupiter", 0.284f, 15.609f, 0.00145f, 15.32f, {0.8f, 0.7f, 0.6f}, true,
+                  "Jupiter: Largest planet\nGreat Red Spot is a giant storm\n79 known moons",
+                  false, 0.0f, 0.0f, {0.0f, 0.0f, 0.0f},
+                  {{"Io", 0.02f, 0.42f, 0.15f, {1.0f, 1.0f, 0.6f},
+                    "Io: Most volcanic body\nSurface temperature: -130°C to -150°C"},
+                   {"Europa", 0.018f, 0.525f, 0.12f, {0.9f, 0.9f, 0.9f},
+                    "Europa: Smooth ice surface\nPossibly contains subsurface ocean"},
+                   {"Ganymede", 0.029f, 0.63f, 0.10f, {0.8f, 0.8f, 0.7f},
+                    "Ganymede: Largest moon in solar system\nHas its own magnetic field"},
+                   {"Callisto", 0.026f, 0.735f, 0.08f, {0.6f, 0.6f, 0.6f},
+                    "Callisto: Most heavily cratered object\nPossibly has subsurface ocean"}}},
+
+                    // Saturn (9.582 * 3.0)
+                    {"Saturn", 0.24f, 28.746f, 0.00058f, 14.11f, {0.9f, 0.8f, 0.5f}, true,
+                     "Saturn: Known for its rings\nLeast dense planet\n82 known moons",
+                     true, 0.225f, 0.375f, {0.8f, 0.8f, 0.6f},
+                     {{"Enceladus", 0.004f, 1.5f, 0.12f, {1.0f, 1.0f, 1.0f},
+                       "Enceladus: Ice geysers\nSubsurface ocean\nActive geology"},
+                      {"Tethys", 0.006f, 1.8f, 0.11f, {0.9f, 0.9f, 0.9f},
+                       "Tethys: Large impact crater\nIcy surface\nHeavily cratered"},
+                      {"Rhea", 0.008f, 1.95f, 0.10f, {0.7f, 0.7f, 0.7f},
+                       "Rhea: Saturn's 2nd largest\nWater ice surface\nThin atmosphere"},
+                      {"Titan", 0.028f, 2.07f, 0.08f, {0.8f, 0.7f, 0.5f},
+                       "Titan: Dense atmosphere\nLiquid methane lakes\nEarth-like features"},
+                      {"Iapetus", 0.008f, 2.39f, 0.06f, {0.5f, 0.5f, 0.5f},
+                       "Iapetus: Two-toned surface\nEquatorial ridge\nWalnut shape"}}},
+
+                       // Uranus (19.201 * 3.0)
+                       {"Uranus", 0.15f, 57.603f, 0.00020f, -8.72f, {0.5f, 0.8f, 0.8f}, true,
+                        "Uranus: Ice giant\nRotates on its side\n27 known moons",
+                        false, 0.0f, 0.0f, {0.0f, 0.0f, 0.0f},
+                        {{"Miranda", 0.004f, 0.18f, 0.13f, {0.8f, 0.8f, 0.8f},
+                          "Miranda: Dramatic cliffs\nUnique surface features\nYoung terrain"},
+                         {"Titania", 0.009f, 0.27f, 0.11f, {0.7f, 0.7f, 0.7f},
+                          "Titania: Largest Uranian moon\nScarped valleys\nIcy surface"},
+                         {"Oberon", 0.008f, 0.33f, 0.09f, {0.6f, 0.6f, 0.6f},
+                          "Oberon: Outermost major moon\nCraters with dark floors\nOld surface"}}},
+
+                          // Neptune (30.047 * 3.0)
+                          {"Neptune", 0.14f, 90.141f, 0.00010f, 9.37f, {0.0f, 0.0f, 0.8f}, true,
+                           "Neptune: Windiest planet\nDarkest ring system\n14 known moons",
+                           false, 0.0f, 0.0f, {0.0f, 0.0f, 0.0f},
+                           {{"Triton", 0.015f, 0.33f, -0.07f, {0.9f, 0.9f, 1.0f},
+                             "Triton: Retrograde orbit\nNitrogen geysers\nFrozen surface"}}},
+
+                             // Pluto (39.482 * 3.0)
+                             {"Pluto", 0.013f, 118.446f, 0.000069f, 0.983f, {0.8f, 0.7f, 0.7f}, true,
+                              "Pluto: Dwarf planet\nCrosses Neptune's orbit\n5 known moons",
+                              false, 0.0f, 0.0f, {0.0f, 0.0f, 0.0f},
+                              {{"Charon", 0.006f, 0.075f, 0.08f, {0.7f, 0.7f, 0.7f},
+                                "Charon: Largest moon of Pluto\nTidally locked\nIcy surface"},
+                               {"Nix", 0.001f, 0.105f, 0.1f, {0.6f, 0.6f, 0.6f},
+                                "Nix: Small irregular moon\nRapid rotation\nHighly reflective"}}},
+
+                                // Eris (67.781 * 3.0)
+                                {"Eris", 0.012f, 203.343f, 0.000054f, 0.932f, {0.85f, 0.85f, 0.85f}, true,
+                                 "Eris: Largest dwarf planet\nMore massive than Pluto\nHighly eccentric orbit",
+                                 false, 0.0f, 0.0f, {0.0f, 0.0f, 0.0f},
+                                 {{"Dysnomia", 0.002f, 0.06f, 0.09f, {0.6f, 0.6f, 0.6f},
+                                   "Dysnomia: Only known moon of Eris\nNamed after daughter of Eris\nDiameter ~700km"}}}
     };
-
     renderer = std::make_unique<Renderer>(zoomLevel);
     renderer->initializeAsteroidBelts();
     double lastFrame = glfwGetTime();
@@ -1342,13 +1538,13 @@ int main() {
             "Dejan Jovanovic RA-212-2021",
             20.0f,  
             SCR_HEIGHT - 40.0f, 
-            1.0f,  // scale
+            1.0f, 
             glm::vec3(1.0f, 1.0f, 1.0f)  
         );
 
         glDisable(GL_BLEND);
 
-        // Render hover text
+       
         if (!selectedObjectInfo.empty()) {
             glEnable(GL_BLEND);
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
