@@ -1,3 +1,18 @@
+//Dejan Jovanovic RA-212-2021
+//
+//CONTROLS FOR SIMULATION:
+//
+//from 1 - 6->speed up or slow down(1 - slow down to 0.5x; 2 - normal speed; 3 - speed up 2x; 4 - speed up 5x; 5 - speed up 10x; 6 - speed up 20x)
+//R -> click to go fullscreen or back to window
+//SPACE -> pause/unpause simulation
+//WASD -> move across 2D space
+//O -> show/hide orbits of planets
+//F -> return to Sun
+//Scroll wheel up/down -> zoom in/ zoom out
+// +- -> zoom in/ zoom out
+//Left click on planetary body -> shows information about that body
+
+
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -15,7 +30,7 @@
 #include <map>
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
-
+#include <thread>
 
 
 
@@ -31,7 +46,7 @@ const char* vertexShaderSource = R"(
 
 #version 330 core
 layout (location = 0) in vec2 aPos;
-layout (location = 1) in vec3 aNormal;
+
 layout (location = 2) in vec2 aTexCoords;
 
 out vec3 FragPos;
@@ -142,30 +157,7 @@ void main() {
 )";
 
 
-const char* starVertexShader = R"(
-        #version 330 core
-        layout (location = 0) in vec2 aPos;
-        uniform mat4 view;
-        uniform mat4 projection;
-        uniform float brightness;
-        
-        out float starBrightness;
-        
-        void main() {
-            gl_Position = projection * view * vec4(aPos, 0.0, 1.0);
-            starBrightness = brightness;
-        }
-    )";
 
-const char* starFragmentShader = R"(
-        #version 330 core
-        in float starBrightness;
-        out vec4 FragColor;
-        
-        void main() {
-            FragColor = vec4(1.0, 1.0, 1.0, starBrightness);
-        }
-    )";
 
 
 struct Character {
@@ -199,7 +191,7 @@ struct Moon {
     float orbitRadius;
     float orbitSpeed;
     glm::vec3 color;
-    std::string texture; 
+    std::string texture;
     std::string info;
 };
 
@@ -218,6 +210,7 @@ struct SolarObject {
     glm::vec3 ringColor;
     std::vector<Moon> moons;
 };
+
 
 
 
@@ -303,7 +296,7 @@ private:
     std::map<char, Character> Characters;
     unsigned int VAO, VBO;
     std::unique_ptr<Shader> textShader;
-  
+
 
     const char* textVertexShaderSource = R"(
         #version 330 core
@@ -329,7 +322,7 @@ private:
             color = vec4(textColor, 1.0) * sampled;
         }
     )";
-    
+
 public:
     TextRenderer(const char* fontPath) {
         FT_Library ft;
@@ -479,16 +472,16 @@ private:
             float x = cos(angle);
             float y = sin(angle);
 
-           
-            float r = sqrt(x * x + y * y);  
+
+            float r = sqrt(x * x + y * y);
             float u = (x / r + 1.0f) * 0.5f;
             float v = (y / r + 1.0f) * 0.5f;
 
-          
-            float len = sqrt(x * x + y * y);  
-            float nx = x / len;  
-            float ny = y / len;  
-            float nz = 0.0f;     
+
+            float len = sqrt(x * x + y * y);
+            float nx = x / len;
+            float ny = y / len;
+            float nz = 0.0f;
 
             // Position
             circleVertices.push_back(x);
@@ -523,14 +516,14 @@ private:
         glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 7 * sizeof(float),
             (void*)(5 * sizeof(float)));
         glEnableVertexAttribArray(2);
-    
+
 
 
         std::vector<float> plutoOrbitVertices;
         for (int i = 0; i <= ORBIT_RES; i++) {
             float angle = 2.0f * PI * i / ORBIT_RES;
-            float x = 16.5f * cos(angle) - 3.0f;  
-            float y = 12.3f * 0.9f * sin(angle) + 1.2f;  
+            float x = 16.5f * cos(angle) - 3.0f;
+            float y = 12.3f * 0.9f * sin(angle) + 1.2f;
             plutoOrbitVertices.push_back(x);
             plutoOrbitVertices.push_back(y);
             float len = sqrt(x * x + y * y);
@@ -583,8 +576,8 @@ private:
             float angle = 2.0f * PI * i / (ORBIT_RES / 2);
             float x = cos(angle);
             float y = sin(angle);
-            float u = angle / (2.0f * PI);  
-            float v = 0.5f + y * 0.5f;      
+            float u = angle / (2.0f * PI);
+            float v = 0.5f + y * 0.5f;
 
             // Calculate proper normal for lighting
             float len = sqrt(x * x + y * y);
@@ -631,7 +624,7 @@ private:
 
         glm::mat4 moonModel = glm::translate(glm::mat4(1.0f), planetPos + moonOffset);
 
-        
+
         moonModel = glm::rotate(moonModel, time * moon.orbitSpeed * 5.0f,
             glm::vec3(0.0f, 0.0f, 1.0f));
 
@@ -706,7 +699,7 @@ private:
         shader->setFloat("ambientStrength", 0.1f);
         shader->setBool("isLightSource", false);
 
-        
+
         shader->setBool("useTexture", false);
         glBindTexture(GL_TEXTURE_2D, 0);
 
@@ -724,8 +717,8 @@ private:
         glBindVertexArray(ringVAO);
         glLineWidth(2.0f);
 
-      
-        glm::vec3 mainRingColor(0.4f, 0.35f, 0.15f); 
+
+        glm::vec3 mainRingColor(0.4f, 0.35f, 0.15f);
 
         struct RingSection {
             float startRadius;
@@ -742,11 +735,11 @@ private:
             {0.8f, 1.0f, 20, 250, 0.006f, "Meteorss"}
         };
 
-      
+
         for (const auto& section : sections) {
             float ringStep = (section.endRadius - section.startRadius) / section.numRings;
 
-            shader->setBool("useTexture", false);  
+            shader->setBool("useTexture", false);
 
             for (int i = 0; i <= section.numRings; i++) {
                 float t = static_cast<float>(i) / section.numRings;
@@ -765,7 +758,7 @@ private:
                 glDrawArrays(GL_LINE_LOOP, 0, ORBIT_RES);
             }
 
-           
+
             for (int i = 0; i < section.numRings / 4; i++) {
                 float radius = section.startRadius + i * (section.endRadius - section.startRadius) / (section.numRings / 4);
                 glm::mat4 currentRingModel = planetModel;
@@ -784,7 +777,7 @@ private:
         float currentRotation = simulationPaused ? currentTime : (currentTime * timeScale);
 
         for (const auto& section : sections) {
-           
+
             if (textures.find(section.meteorTexture) != textures.end()) {
                 glActiveTexture(GL_TEXTURE0);
                 glBindTexture(GL_TEXTURE_2D, textures[section.meteorTexture]);
@@ -807,12 +800,12 @@ private:
                 meteorModel = glm::rotate(meteorModel, angle, glm::vec3(0.0f, 0.0f, 1.0f));
 
                 shader->setMat4("model", meteorModel);
-                shader->setVec3("uCol", glm::vec3(1.0f)); 
+                shader->setVec3("uCol", glm::vec3(1.0f));
                 glDrawArrays(GL_TRIANGLE_FAN, 0, ORBIT_RES);
             }
         }
 
-        
+
         glBindTexture(GL_TEXTURE_2D, 0);
         shader->setBool("useTexture", false);
         glLineWidth(1.0f);
@@ -856,7 +849,7 @@ public:
             std::string path = "textures/" + name + ".jpg";
             unsigned int textureID = loadTexture(path.c_str());
             std::string objName = name;
-            objName[0] = std::toupper(objName[0]); 
+            objName[0] = std::toupper(objName[0]);
             textures[objName] = textureID;
         }
     }
@@ -869,11 +862,11 @@ public:
         glBindVertexArray(circleVAO);
 
 
-     
-        if (obj.name == "Sun") {
-            shader->setFloat("ambientStrength", 1.0f);  
 
-            
+        if (obj.name == "Sun") {
+            shader->setFloat("ambientStrength", 1.0f);
+
+
             if (textures.find("Sun") != textures.end()) {
                 glActiveTexture(GL_TEXTURE0);
                 glBindTexture(GL_TEXTURE_2D, textures["Sun"]);
@@ -897,18 +890,18 @@ public:
             }
         }
 
-        
+
         if (obj.name == "Pluto" || obj.name == "Eris") {
             float angle = time * obj.orbitSpeed;
             float x, y;
 
             if (obj.name == "Pluto") {
-                x = 121.5f * cos(angle) + 12.0f;  
-                y = 150.3f * 0.9f * sin(angle) - 49.2f; 
+                x = 121.5f * cos(angle) + 12.0f;
+                y = 150.3f * 0.9f * sin(angle) - 49.2f;
             }
             else { // Eris
-                x = 255.6f * cos(angle) - 78.0f;  
-                y = 140.4f * 0.85f * sin(angle) + 21.0f;  
+                x = 255.6f * cos(angle) - 78.0f;
+                y = 140.4f * 0.85f * sin(angle) + 21.0f;
             }
 
             // Draw orbit path if enabled
@@ -920,12 +913,12 @@ public:
                 for (int i = 0; i <= ORBIT_RES; i++) {
                     float a = 2.0f * PI * i / ORBIT_RES;
                     if (obj.name == "Pluto") {
-                        orbitVertices.push_back(121.5f * cos(a) + 12.0f); 
-                        orbitVertices.push_back(150.3f * 0.9f * sin(a) - 49.2f);  
+                        orbitVertices.push_back(121.5f * cos(a) + 12.0f);
+                        orbitVertices.push_back(150.3f * 0.9f * sin(a) - 49.2f);
                     }
                     else {
-                        orbitVertices.push_back(255.6f * cos(a) - 78.0f);  
-                        orbitVertices.push_back(140.4f * 0.85f * sin(a) + 21.0f);  
+                        orbitVertices.push_back(255.6f * cos(a) - 78.0f);
+                        orbitVertices.push_back(140.4f * 0.85f * sin(a) + 21.0f);
                     }
                 }
 
@@ -943,7 +936,7 @@ public:
                 glBindVertexArray(circleVAO);
             }
 
-           
+
             glm::mat4 baseModel = glm::translate(glm::mat4(1.0f), glm::vec3(x, y, 0.0f));
             glm::mat4 model = glm::scale(
                 glm::rotate(baseModel, time * obj.selfRotationSpeed, glm::vec3(0.0f, 0.0f, 1.0f)),
@@ -954,13 +947,13 @@ public:
             shader->setVec3("uCol", obj.color);
             glDrawArrays(GL_TRIANGLE_FAN, 0, ORBIT_RES);
 
-           
+
             for (const auto& moon : obj.moons) {
                 drawMoon(moon, baseModel, time, showOrbits);
             }
         }
         else {
-           
+
             if (obj.drawOrbit && showOrbits) {
                 glm::mat4 orbitModel = glm::scale(glm::mat4(1.0f),
                     glm::vec3(obj.orbitRadius, obj.orbitRadius, 1.0f));
@@ -980,29 +973,29 @@ public:
             shader->setVec3("uCol", obj.color);
             glDrawArrays(GL_TRIANGLE_FAN, 0, ORBIT_RES);
 
-           
+
             for (const auto& moon : obj.moons) {
                 drawMoon(moon, model, time, showOrbits);
             }
 
-         
+
             if (obj.hasRings) {
                 drawRings(obj, model);
             }
         }
 
-       
+
         glBindTexture(GL_TEXTURE_2D, 0);
         shader->setBool("useTexture", false);
     }
 
     void initializeAsteroidBelts() {
-       
+
         AsteroidBelt mainBelt{
             "Main Asteroid Belt",
             6.3f,  // minRadius 
             9.9f,  // maxRadius
-            3000,   // numAsteroids
+            1500,   // numAsteroids
             {},    // asteroids vector
             glm::vec3(0.6f, 0.6f, 0.6f),  // color
             "\nLocated between Mars and Jupiter\nContains millions of asteroids"
@@ -1013,7 +1006,7 @@ public:
             "Kuiper Belt",
             138.0f,  // minRadius 
              198.0f,  // maxRadius
-            15000,   // numAsteroids
+            150,   // numAsteroids
             {},    // asteroids vector
             glm::vec3(0.6f, 0.6f, 0.6f),  // color
             "\nBeyond Neptune's orbit\nHome to many dwarf planets"
@@ -1070,7 +1063,7 @@ public:
             }
         }
 
-      
+
         glBindTexture(GL_TEXTURE_2D, 0);
         shader->setBool("useTexture", false);
     }
@@ -1104,34 +1097,34 @@ public:
 
 
 
-    class StarfieldBackground {
-    private:
-        struct Star {
-            float x, y;
-            float brightness;
-            float twinkleSpeed;
-            float twinklePhase;
-            glm::vec3 color;
-        };
+class StarfieldBackground {
+private:
+    struct Star {
+        float x, y;
+        float brightness;
+        float twinkleSpeed;
+        float twinklePhase;
+        glm::vec3 color;
+    };
 
 
 
-        const std::vector<glm::vec3> starColors = {
-      glm::vec3(0.85f, 0.90f, 1.00f),  // Blue-white (O type)
-      glm::vec3(1.00f, 1.00f, 1.00f),  // White (A type)
-      glm::vec3(1.00f, 0.95f, 0.80f),  // Yellow-white (F type)
-      glm::vec3(1.00f, 0.85f, 0.60f),  // Yellow (G type, like our Sun)
-      glm::vec3(1.00f, 0.75f, 0.40f),  // Orange (K type)
-      glm::vec3(1.00f, 0.50f, 0.20f),  // Red (M type)
-      glm::vec3(0.70f, 0.70f, 1.00f),  // Blue giants
-      glm::vec3(0.90f, 0.60f, 0.60f)   // Red giants
-        };
+    const std::vector<glm::vec3> starColors = {
+  glm::vec3(0.85f, 0.90f, 1.00f),  // Blue-white (O type)
+  glm::vec3(1.00f, 1.00f, 1.00f),  // White (A type)
+  glm::vec3(1.00f, 0.95f, 0.80f),  // Yellow-white (F type)
+  glm::vec3(1.00f, 0.85f, 0.60f),  // Yellow (G type, like our Sun)
+  glm::vec3(1.00f, 0.75f, 0.40f),  // Orange (K type)
+  glm::vec3(1.00f, 0.50f, 0.20f),  // Red (M type)
+  glm::vec3(0.70f, 0.70f, 1.00f),  // Blue giants
+  glm::vec3(0.90f, 0.60f, 0.60f)   // Red giants
+    };
 
-        std::vector<Star> stars;
-        unsigned int starVAO, starVBO;
-        std::unique_ptr<Shader> starShader;
+    std::vector<Star> stars;
+    unsigned int starVAO, starVBO;
+    std::unique_ptr<Shader> starShader;
 
-        const char* starVertexShader = R"(
+    const char* starVertexShader = R"(
         #version 330 core
         layout (location = 0) in vec2 aPos;
         uniform mat4 view;
@@ -1146,7 +1139,7 @@ public:
         }
     )";
 
-        const char* starFragmentShader = R"(
+    const char* starFragmentShader = R"(
         #version 330 core
         in float starBrightness;
         uniform vec3 starColor;
@@ -1157,63 +1150,63 @@ public:
         }
     )";
 
-    public:
-        StarfieldBackground(int numStars = 1000, float fieldSize = 200.0f) {
-            starShader = std::make_unique<Shader>(starVertexShader, starFragmentShader);
+public:
+    StarfieldBackground(int numStars = 1000, float fieldSize = 200.0f) {
+        starShader = std::make_unique<Shader>(starVertexShader, starFragmentShader);
 
-            stars.resize(numStars);
-            for (auto& star : stars) {
-                star.x = (float(rand()) / RAND_MAX * 2.0f - 1.0f) * fieldSize;
-                star.y = (float(rand()) / RAND_MAX * 2.0f - 1.0f) * fieldSize;
-                star.brightness = float(rand()) / RAND_MAX * 0.5f + 0.5f;
-                star.twinkleSpeed = float(rand()) / RAND_MAX * 2.0f + 1.0f;
-                star.twinklePhase = float(rand()) / RAND_MAX * 2.0f * PI;
-                // Randomly assign a star color
-                star.color = starColors[rand() % starColors.size()];
-            }
-
-          
-            glGenVertexArrays(1, &starVAO);
-            glGenBuffers(1, &starVBO);
-            glBindVertexArray(starVAO);
-
-            std::vector<float> vertices;
-            vertices.reserve(numStars * 2);
-            for (const auto& star : stars) {
-                vertices.push_back(star.x);
-                vertices.push_back(star.y);
-            }
-
-            glBindBuffer(GL_ARRAY_BUFFER, starVBO);
-            glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
-
-            glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
-            glEnableVertexAttribArray(0);
+        stars.resize(numStars);
+        for (auto& star : stars) {
+            star.x = (float(rand()) / RAND_MAX * 2.0f - 1.0f) * fieldSize;
+            star.y = (float(rand()) / RAND_MAX * 2.0f - 1.0f) * fieldSize;
+            star.brightness = float(rand()) / RAND_MAX * 0.5f + 0.5f;
+            star.twinkleSpeed = float(rand()) / RAND_MAX * 2.0f + 1.0f;
+            star.twinklePhase = float(rand()) / RAND_MAX * 2.0f * PI;
+            // Randomly assign a star color
+            star.color = starColors[rand() % starColors.size()];
         }
 
-        void render(const glm::mat4& view, const glm::mat4& projection, float currentTime) {
-            starShader->use();
-            starShader->setMat4("view", view);
-            starShader->setMat4("projection", projection);
 
-            glBindVertexArray(starVAO);
-            glPointSize(2.0f);
+        glGenVertexArrays(1, &starVAO);
+        glGenBuffers(1, &starVBO);
+        glBindVertexArray(starVAO);
 
-            for (size_t i = 0; i < stars.size(); i++) {
-                float brightness = stars[i].brightness *
-                    (0.8f + 0.2f * sin(currentTime * stars[i].twinkleSpeed + stars[i].twinklePhase));
-
-                starShader->setFloat("brightness", brightness);
-                starShader->setVec3("starColor", stars[i].color);  
-                glDrawArrays(GL_POINTS, i, 1);
-            }
+        std::vector<float> vertices;
+        vertices.reserve(numStars * 2);
+        for (const auto& star : stars) {
+            vertices.push_back(star.x);
+            vertices.push_back(star.y);
         }
 
-        ~StarfieldBackground() {
-            glDeleteVertexArrays(1, &starVAO);
-            glDeleteBuffers(1, &starVBO);
+        glBindBuffer(GL_ARRAY_BUFFER, starVBO);
+        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
+
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(0);
+    }
+
+    void render(const glm::mat4& view, const glm::mat4& projection, float currentTime) {
+        starShader->use();
+        starShader->setMat4("view", view);
+        starShader->setMat4("projection", projection);
+
+        glBindVertexArray(starVAO);
+        glPointSize(2.0f);
+
+        for (size_t i = 0; i < stars.size(); i++) {
+            float brightness = stars[i].brightness *
+                (0.8f + 0.2f * sin(currentTime * stars[i].twinkleSpeed + stars[i].twinklePhase));
+
+            starShader->setFloat("brightness", brightness);
+            starShader->setVec3("starColor", stars[i].color);
+            glDrawArrays(GL_POINTS, i, 1);
         }
-    };
+    }
+
+    ~StarfieldBackground() {
+        glDeleteVertexArrays(1, &starVAO);
+        glDeleteBuffers(1, &starVBO);
+    }
+};
 
 
 
@@ -1243,6 +1236,11 @@ glm::vec3 cameraTarget(0.0f, 0.0f, 0.0f);
 float cameraSpeed = 3.0f;
 std::unique_ptr<StarfieldBackground> starfield;
 bool isFullscreen = false;
+double lastTime = 0.0;
+int frameCount = 0;
+double lastFPSUpdate = 0.0;
+int currentFPS = 0;
+
 
 float clamp(float value, float min, float max) {
     return std::min(std::max(value, min), max);
@@ -1361,36 +1359,36 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         switch (key) {
         case GLFW_KEY_SPACE:
             simulationPaused = !simulationPaused;
-            renderer->setSimulationPaused(simulationPaused);  
+            renderer->setSimulationPaused(simulationPaused);
             break;
         case GLFW_KEY_O:
             showOrbits = !showOrbits;
             break;
         case GLFW_KEY_1:
             timeScale = 0.5f;
-            renderer->setTimeScale(timeScale);  
+            renderer->setTimeScale(timeScale);
             break;
         case GLFW_KEY_2:
             timeScale = 1.0f;
-            renderer->setTimeScale(timeScale);  
+            renderer->setTimeScale(timeScale);
             break;
         case GLFW_KEY_3:
             timeScale = 2.0f;
-            renderer->setTimeScale(timeScale); 
+            renderer->setTimeScale(timeScale);
             break;
         case GLFW_KEY_4:
             timeScale = 5.0f;
-            renderer->setTimeScale(timeScale); 
+            renderer->setTimeScale(timeScale);
             break;
         case GLFW_KEY_5:
             timeScale = 10.0f;
-            renderer->setTimeScale(timeScale); 
+            renderer->setTimeScale(timeScale);
             break;
         case GLFW_KEY_6:
             timeScale = 20.0f;
-            renderer->setTimeScale(timeScale); 
+            renderer->setTimeScale(timeScale);
             break;
-        case GLFW_KEY_F: 
+        case GLFW_KEY_F:
             cameraPosition = glm::vec3(0.0f, 0.0f, zoomLevel);
             cameraTarget = glm::vec3(0.0f, 0.0f, 0.0f);
             if (renderer) {
@@ -1408,12 +1406,12 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
             const GLFWvidmode* mode = glfwGetVideoMode(primaryMonitor);
 
             if (!isFullscreen) {
-                
+
                 glfwSetWindowMonitor(window, primaryMonitor, 0, 0,
                     mode->width, mode->height, mode->refreshRate);
             }
             else {
-                
+
                 int windowPosX = (mode->width - SCR_WIDTH) / 2;
                 int windowPosY = (mode->height - SCR_HEIGHT) / 2;
                 glfwSetWindowMonitor(window, nullptr, windowPosX, windowPosY,
@@ -1441,7 +1439,7 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
 
     selectedObjectInfo = "";
 
-   
+
     for (const auto& belt : renderer->getAsteroidBelts()) {
         float dist = sqrt(worldX * worldX + worldY * worldY);
         if (dist >= belt.minRadius && dist <= belt.maxRadius) {
@@ -1455,19 +1453,19 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
         float planetX, planetY;
 
         if (obj.name == "Pluto") {
-            planetX = 121.5f * cos(planetAngle) + 12.0f;  
-            planetY = 150.3f * 0.9f * sin(planetAngle) - 49.2f;  
+            planetX = 121.5f * cos(planetAngle) + 12.0f;
+            planetY = 150.3f * 0.9f * sin(planetAngle) - 49.2f;
         }
         else if (obj.name == "Eris") {
-            planetX = 255.6f * cos(planetAngle) - 78.0f;  
-            planetY = 140.4f * 0.85f * sin(planetAngle) + 21.0f;  
+            planetX = 255.6f * cos(planetAngle) - 78.0f;
+            planetY = 140.4f * 0.85f * sin(planetAngle) + 21.0f;
         }
         else {
             planetX = obj.orbitRadius * cos(planetAngle);
             planetY = obj.orbitRadius * sin(planetAngle);
         }
 
-        
+
         for (const auto& moon : obj.moons) {
             float baseAngle = currentTime * moon.orbitSpeed;
             float moonX = planetX + moon.orbitRadius * cos(baseAngle);
@@ -1493,7 +1491,7 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
         if (!selectedObjectInfo.empty()) {
-         
+
             for (const auto& belt : renderer->getAsteroidBelts()) {
                 if (selectedObjectInfo == belt.name) {
                     selectedObjectName = belt.name;
@@ -1502,10 +1500,10 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
                 }
             }
 
-            
+
             size_t hyphenPos = selectedObjectInfo.find(" - ");
             if (hyphenPos != std::string::npos) {
-           
+
                 std::string planetName = selectedObjectInfo.substr(0, hyphenPos);
                 std::string moonName = selectedObjectInfo.substr(hyphenPos + 3);
 
@@ -1522,7 +1520,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
                 }
             }
             else {
-                
+
                 for (const auto& obj : solarSystem) {
                     if (obj.name == selectedObjectInfo) {
                         selectedObjectName = obj.name;
@@ -1536,14 +1534,19 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 }
 
 void limitFPS(double desiredFPS) {
-    static double lastTime = 0.0;
-    double currentTime = glfwGetTime();
-    double deltaTime = currentTime - lastTime;
+    static double lastTime = glfwGetTime();
+    const double frameTime = 1.0 / desiredFPS;
 
-    if (deltaTime < 1.0 / desiredFPS) {
-        glfwWaitEventsTimeout(1.0 / desiredFPS - deltaTime);
+
+    while (true) {
+        double currentTime = glfwGetTime();
+        if (currentTime - lastTime >= frameTime) {
+            lastTime = currentTime;
+            break;
+        }
+
+        std::this_thread::yield();
     }
-    lastTime = currentTime;
 }
 
 int main() {
@@ -1556,14 +1559,14 @@ int main() {
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_MAXIMIZED, GLFW_TRUE);
 
-   
+
     GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Solar System", NULL, NULL);
     if (!window) {
         glfwTerminate();
         return -1;
     }
 
-    
+
     GLFWmonitor* primaryMonitor = glfwGetPrimaryMonitor();
     const GLFWvidmode* mode = glfwGetVideoMode(primaryMonitor);
 
@@ -1579,16 +1582,16 @@ int main() {
     glfwSetKeyCallback(window, key_callback);
     glfwSetScrollCallback(window, scroll_callback);
 
-  
 
-    
+
+
 
 
     if (glewInit() != GLEW_OK) {
         return -1;
     }
 
-    
+
 
     //"Sun" - object name
     //    0.03f - radius of rendered sphere
@@ -1697,11 +1700,21 @@ int main() {
     starfield = std::make_unique<StarfieldBackground>(2000, zoomLevel * 10.0f);
     double lastFrame = glfwGetTime();
     renderer->loadTextures();
+    lastTime = glfwGetTime();
+    lastFPSUpdate = lastTime;
 
     while (!glfwWindowShouldClose(window)) {
         double currentFrame = glfwGetTime();
         float deltaTime = static_cast<float>(currentFrame - lastFrame);
         lastFrame = currentFrame;
+
+
+        frameCount++;
+        if (currentFrame - lastFPSUpdate >= 1.0) {
+            currentFPS = frameCount;
+            frameCount = 0;
+            lastFPSUpdate = currentFrame;
+        }
 
         if (!simulationPaused) {
             currentTime += deltaTime * timeScale;
@@ -1710,8 +1723,8 @@ int main() {
 
         processInput(window);
 
-       
-        glClearColor(0.0f, 0.0f, 0.02f, 1.0f); 
+
+        glClearColor(0.0f, 0.0f, 0.02f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
         renderer->updateCamera();
@@ -1725,7 +1738,7 @@ int main() {
         }
 
 
-        renderer->drawAsteroidBelts(currentTime);  
+        renderer->drawAsteroidBelts(currentTime);
         for (const auto& obj : solarSystem) {
             renderer->drawObject(obj, currentTime, showOrbits);
         }
@@ -1737,17 +1750,27 @@ int main() {
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+        std::string fpsText = "FPS: " + std::to_string(currentFPS);
         textRenderer->RenderText(
             "Dejan Jovanovic RA-212-2021",
-            20.0f,  
-            SCR_HEIGHT - 40.0f, 
-            1.0f, 
-            glm::vec3(1.0f, 1.0f, 1.0f)  
+            20.0f,
+            SCR_HEIGHT - 40.0f,
+            1.0f,
+            glm::vec3(1.0f, 1.0f, 1.0f)
+        );
+
+        // Display FPS counter in top right corner
+        textRenderer->RenderText(
+            "FPS: " + std::to_string(currentFPS),
+            SCR_WIDTH - 150.0f,  // Position from right
+            SCR_HEIGHT - 40.0f,  // Position from top
+            1.0f,
+            glm::vec3(1.0f, 1.0f, 1.0f)  // White color
         );
 
         glDisable(GL_BLEND);
 
-       
+
         if (!selectedObjectInfo.empty()) {
             glEnable(GL_BLEND);
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -1774,33 +1797,33 @@ int main() {
             std::string line;
             std::vector<std::string> lines;
 
-          
+
             lines.push_back(selectedObjectName);
 
-            
+
             while (std::getline(descStream, line)) {
                 lines.push_back(line);
             }
 
-           
+
             for (int i = lines.size() - 1; i >= 0; i--) {
                 float y = baseY + (lines.size() - 1 - i) * lineHeight;
 
-                
+
                 if (i == 0) {
                     textRenderer->RenderText(lines[i],
                         SCR_WIDTH - margin - textRenderer->GetTextWidth(lines[i], 1.2f),
                         y,
                         1.2f,
-                        glm::vec3(1.0f, 0.8f, 0.0f));  
+                        glm::vec3(1.0f, 0.8f, 0.0f));
                 }
-               
+
                 else {
                     textRenderer->RenderText(lines[i],
                         SCR_WIDTH - margin - textRenderer->GetTextWidth(lines[i], 1.0f),
                         y,
                         1.0f,
-                        glm::vec3(0.9f, 0.9f, 0.9f));  
+                        glm::vec3(0.9f, 0.9f, 0.9f));
                 }
             }
 
