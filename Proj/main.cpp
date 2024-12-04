@@ -2,7 +2,7 @@
 //
 //CONTROLS FOR SIMULATION:
 //
-//from 1 - 6->speed up or slow down(1 - slow down to 0.5x; 2 - normal speed; 3 - speed up 2x; 4 - speed up 5x; 5 - speed up 10x; 6 - speed up 20x)
+//keys from 1 to 6->speed up or slow down(1 - slow down to 0.5x; 2 - normal speed; 3 - speed up 2x; 4 - speed up 5x; 5 - speed up 10x; 6 - speed up 20x)
 //R -> click to go fullscreen or back to window
 //SPACE -> pause/unpause simulation
 //WASD -> move across 2D space
@@ -11,7 +11,23 @@
 //Scroll wheel up/down -> zoom in/ zoom out
 // +- -> zoom in/ zoom out
 //Left click on planetary body -> shows information about that body
-
+//
+//KONTROLE SIMULACIJE
+// 
+//tasteri od 1 do 6 -> ubrzaj ili uspori (1 - usopri na 0.5x; 2 - normalna brzina; 3 - ubrzaj 2x; 4 - ubrzaj 5x; 5 - ubrzaj 10x; 6 - ubrzaj 20x)
+//R -> klikni za prelazak na cijeli ekran ili povratak na prozor
+//SPACE -> pauziraj/ponisti pauzu simulacije
+//WASD -> kretanje kroz 2D prostor
+//O -> prikazi/sakrij orbite tijela
+//F -> povratak na Sunce
+//Tockic misa gore/dole -> zumiraj/odzumiraj
+//+- -> zumiraj/odzumiraj
+//Lijevi klik na nebesko tijelo -> prikazuje informacije o tom tijelu
+//
+//ZA POKRETANJE PROJEKTA IZBRISATI PACKAGES FOLDER, UCI U .SLN PONOVO I KLIKNUTI DESNIM KLIKOM NA SOLUTION I "RESTORE PACKAGES"
+//za font,program koristi putanju "C:/Windows/Fonts/"
+//DODATNE BIBLIOTEKE: 
+//Freetype (text), stb_image.h(texture)
 
 #include <iostream>
 #include <fstream>
@@ -1001,12 +1017,12 @@ public:
             "\nLocated between Mars and Jupiter\nContains millions of asteroids"
         };
 
-        // Kuiper Belt which is beyond Neptune
+       
         AsteroidBelt kuiperBelt{
             "Kuiper Belt",
             138.0f,  // minRadius 
              198.0f,  // maxRadius
-            150,   // numAsteroids
+            10000,   // numAsteroids
             {},    // asteroids vector
             glm::vec3(0.6f, 0.6f, 0.6f),  // color
             "\nBeyond Neptune's orbit\nHome to many dwarf planets"
@@ -1052,7 +1068,6 @@ public:
                     glm::vec3(asteroid.orbitRadius * cos(angle),
                         asteroid.orbitRadius * sin(angle), 0.0f));
 
-                // Add rotation for variety in texture orientation
                 model = glm::rotate(model, angle * 0.5f + asteroid.orbitOffset,
                     glm::vec3(0.0f, 0.0f, 1.0f));
 
@@ -1113,7 +1128,7 @@ private:
   glm::vec3(0.85f, 0.90f, 1.00f),  // Blue-white (O type)
   glm::vec3(1.00f, 1.00f, 1.00f),  // White (A type)
   glm::vec3(1.00f, 0.95f, 0.80f),  // Yellow-white (F type)
-  glm::vec3(1.00f, 0.85f, 0.60f),  // Yellow (G type, like our Sun)
+  glm::vec3(1.00f, 0.85f, 0.60f),  // Yellow (G type)
   glm::vec3(1.00f, 0.75f, 0.40f),  // Orange (K type)
   glm::vec3(1.00f, 0.50f, 0.20f),  // Red (M type)
   glm::vec3(0.70f, 0.70f, 1.00f),  // Blue giants
@@ -1759,13 +1774,13 @@ int main() {
             glm::vec3(1.0f, 1.0f, 1.0f)
         );
 
-        // Display FPS counter in top right corner
+        
         textRenderer->RenderText(
             "FPS: " + std::to_string(currentFPS),
-            SCR_WIDTH - 150.0f,  // Position from right
-            SCR_HEIGHT - 40.0f,  // Position from top
+            SCR_WIDTH - 150.0f,  
+            SCR_HEIGHT - 40.0f,  
             1.0f,
-            glm::vec3(1.0f, 1.0f, 1.0f)  // White color
+            glm::vec3(1.0f, 1.0f, 1.0f)  
         );
 
         glDisable(GL_BLEND);

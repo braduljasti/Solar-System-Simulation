@@ -13,12 +13,6 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
-    <Filter Include="Source Files\Shader Files">
-      <UniqueIdentifier>{a8b5ff39-85c7-4196-b461-819f918ebb58}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Resource Files\textures">
-      <UniqueIdentifier>{a3ad7f09-48c6-4ada-9d2e-644fe8d3e753}</UniqueIdentifier>
-    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -27,120 +21,10 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
-    <None Include="basic.vert">
-      <Filter>Source Files\Shader Files</Filter>
-    </None>
-    <None Include="basic.frag">
-      <Filter>Source Files\Shader Files</Filter>
-    </None>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stb_image.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <Image Include="textures\asteroid.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\callisto.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\charon.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\deimos.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\dysnomia.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\earth.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\enceladus.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\eris.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\europa.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\ganymede.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\iapetus.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\io.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\jupiter.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\mars.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\mercury.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\meteor.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\meteors.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\meteorss.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\miranda.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\moon.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\neptune.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\nix.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\oberon.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\phobos.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\pluto.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\rhea.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\saturn.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\sun.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\tethys.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\titan.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\titania.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\triton.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\uranus.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
-    <Image Include="textures\venus.jpg">
-      <Filter>Resource Files\textures</Filter>
-    </Image>
   </ItemGroup>
 </Project>

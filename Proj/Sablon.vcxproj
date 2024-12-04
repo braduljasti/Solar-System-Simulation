@@ -145,48 +145,10 @@
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="basic.vert" />
-    <None Include="basic.frag" />
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stb_image.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <Image Include="textures\asteroid.jpg" />
-    <Image Include="textures\callisto.jpg" />
-    <Image Include="textures\charon.jpg" />
-    <Image Include="textures\deimos.jpg" />
-    <Image Include="textures\dysnomia.jpg" />
-    <Image Include="textures\earth.jpg" />
-    <Image Include="textures\enceladus.jpg" />
-    <Image Include="textures\eris.jpg" />
-    <Image Include="textures\europa.jpg" />
-    <Image Include="textures\ganymede.jpg" />
-    <Image Include="textures\iapetus.jpg" />
-    <Image Include="textures\io.jpg" />
-    <Image Include="textures\jupiter.jpg" />
-    <Image Include="textures\mars.jpg" />
-    <Image Include="textures\mercury.jpg" />
-    <Image Include="textures\meteor.jpg" />
-    <Image Include="textures\meteors.jpg" />
-    <Image Include="textures\meteorss.jpg" />
-    <Image Include="textures\miranda.jpg" />
-    <Image Include="textures\moon.jpg" />
-    <Image Include="textures\neptune.jpg" />
-    <Image Include="textures\nix.jpg" />
-    <Image Include="textures\oberon.jpg" />
-    <Image Include="textures\phobos.jpg" />
-    <Image Include="textures\pluto.jpg" />
-    <Image Include="textures\rhea.jpg" />
-    <Image Include="textures\saturn.jpg" />
-    <Image Include="textures\sun.jpg" />
-    <Image Include="textures\tethys.jpg" />
-    <Image Include="textures\titan.jpg" />
-    <Image Include="textures\titania.jpg" />
-    <Image Include="textures\triton.jpg" />
-    <Image Include="textures\uranus.jpg" />
-    <Image Include="textures\venus.jpg" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
