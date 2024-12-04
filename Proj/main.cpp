@@ -27,7 +27,7 @@
 //ZA POKRETANJE PROJEKTA IZBRISATI PACKAGES FOLDER, UCI U .SLN PONOVO I KLIKNUTI DESNIM KLIKOM NA SOLUTION I "RESTORE PACKAGES"
 //za font,program koristi putanju "C:/Windows/Fonts/"
 //DODATNE BIBLIOTEKE: 
-//Freetype (text), stb_image.h(texture)
+//Freetype (text), stb_image.h(texture) su unutar Solution env
 
 
 //comment for commit
@@ -173,6 +173,53 @@ void main() {
     FragColor = vec4(result, 1.0);
 }
 )";
+
+
+
+
+
+
+
+
+const char* instancedVertexShaderSource = R"(
+#version 330 core
+layout (location = 0) in vec2 aPos;
+layout (location = 1) in vec3 aNormal;
+layout (location = 2) in vec2 aTexCoords;
+
+layout (location = 3) in vec2 aOffset;   
+layout (location = 4) in float aScale;   
+layout (location = 5) in float aRotation; 
+
+out vec3 FragPos;
+out vec3 Normal;
+out vec2 TexCoords;
+
+uniform mat4 view;
+uniform mat4 projection;
+
+void main() {
+   
+    float cosR = cos(aRotation);
+    float sinR = sin(aRotation);
+    mat2 rot = mat2(cosR, -sinR, sinR, cosR);
+    
+    
+    vec2 scaledPos = aPos * aScale;
+    vec2 rotatedPos = rot * scaledPos;
+    vec2 finalPos = rotatedPos + aOffset;
+    
+    
+    vec2 rotatedNormal = rot * vec2(aNormal.x, aNormal.y);
+    Normal = normalize(vec3(rotatedNormal.x, rotatedNormal.y, aNormal.z));
+    
+    FragPos = vec3(finalPos, 0.0);
+    TexCoords = aTexCoords;
+    
+    gl_Position = projection * view * vec4(finalPos, 0.0, 1.0);
+}
+)";
+
 
 
 
@@ -465,6 +512,13 @@ public:
     }
 };
 
+
+struct AsteroidInstance {
+    glm::vec2 offset;
+    float scale;
+    float rotation;
+};
+
 class Renderer {
 private:
     unsigned int circleVAO, circleVBO;
@@ -480,41 +534,33 @@ private:
     std::map<std::string, unsigned int> textures;
     bool simulationPaused;
     float timeScale;
+    unsigned int instanceVBO;
+    std::vector<AsteroidInstance> asteroidInstances;
+    std::unique_ptr<Shader> instancedShader;
 
     void setupBuffers() {
-
-
+     
         std::vector<float> circleVertices;
         for (int i = 0; i <= ORBIT_RES; i++) {
             float angle = 2.0f * PI * i / ORBIT_RES;
             float x = cos(angle);
             float y = sin(angle);
 
-
             float r = sqrt(x * x + y * y);
             float u = (x / r + 1.0f) * 0.5f;
             float v = (y / r + 1.0f) * 0.5f;
-
 
             float len = sqrt(x * x + y * y);
             float nx = x / len;
             float ny = y / len;
             float nz = 0.0f;
 
-            // Position
-            circleVertices.push_back(x);
-            circleVertices.push_back(y);
-            // Normal
-            circleVertices.push_back(nx);
-            circleVertices.push_back(ny);
-            circleVertices.push_back(nz);
-            // Texture coords
-            circleVertices.push_back(u);
-            circleVertices.push_back(v);
+            circleVertices.insert(circleVertices.end(), {
+                x, y,           //pos
+                nx, ny, nz,     //normal
+                u, v            //text coords
+                });
         }
-
-
-
 
         glGenVertexArrays(1, &circleVAO);
         glGenBuffers(1, &circleVBO);
@@ -523,59 +569,82 @@ private:
         glBufferData(GL_ARRAY_BUFFER, circleVertices.size() * sizeof(float),
             circleVertices.data(), GL_STATIC_DRAW);
 
-        // Position attribute
         glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)0);
         glEnableVertexAttribArray(0);
-        // Normal attribute
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(float),
-            (void*)(2 * sizeof(float)));
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)(2 * sizeof(float)));
         glEnableVertexAttribArray(1);
-        // Texture coords attribute
-        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 7 * sizeof(float),
-            (void*)(5 * sizeof(float)));
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)(5 * sizeof(float)));
         glEnableVertexAttribArray(2);
 
-
-
-        std::vector<float> plutoOrbitVertices;
-        for (int i = 0; i <= ORBIT_RES; i++) {
-            float angle = 2.0f * PI * i / ORBIT_RES;
-            float x = 16.5f * cos(angle) - 3.0f;
-            float y = 12.3f * 0.9f * sin(angle) + 1.2f;
-            plutoOrbitVertices.push_back(x);
-            plutoOrbitVertices.push_back(y);
+        //buffer
+        std::vector<float> asteroidVertices;
+        for (int i = 0; i < ORBIT_RES / 2; i++) {
+            float angle = 2.0f * PI * i / (ORBIT_RES / 2);
+            float x = cos(angle);
+            float y = sin(angle);
             float len = sqrt(x * x + y * y);
-            plutoOrbitVertices.push_back(x / len);
-            plutoOrbitVertices.push_back(y / len);
-            plutoOrbitVertices.push_back(0.0f);
+            float nx = x / len;
+            float ny = y / len;
+            float nz = 0.0f;
+            float u = angle / (2.0f * PI);
+            float v = 0.5f + y * 0.5f;
+
+            asteroidVertices.insert(asteroidVertices.end(), {
+                x, y,           //pos
+                nx, ny, nz,     //normala
+                u, v            //tex coords
+                });
         }
-        glGenVertexArrays(1, &plutoOrbitVAO);
-        glGenBuffers(1, &plutoOrbitVBO);
-        glBindVertexArray(plutoOrbitVAO);
-        glBindBuffer(GL_ARRAY_BUFFER, plutoOrbitVBO);
-        glBufferData(GL_ARRAY_BUFFER, plutoOrbitVertices.size() * sizeof(float),
-            plutoOrbitVertices.data(), GL_STATIC_DRAW);
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+
+        glGenVertexArrays(1, &asteroidVAO);
+        glGenBuffers(1, &asteroidVBO);
+        glGenBuffers(1, &instanceVBO);
+
+        glBindVertexArray(asteroidVAO);
+
+        
+        glBindBuffer(GL_ARRAY_BUFFER, asteroidVBO);
+        glBufferData(GL_ARRAY_BUFFER, asteroidVertices.size() * sizeof(float),
+            asteroidVertices.data(), GL_STATIC_DRAW);
+
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)0);
         glEnableVertexAttribArray(0);
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float),
-            (void*)(2 * sizeof(float)));
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)(2 * sizeof(float)));
         glEnableVertexAttribArray(1);
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)(5 * sizeof(float)));
+        glEnableVertexAttribArray(2);
 
+        // Set up instance attributes
+        glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(AsteroidInstance) * 20000, nullptr, GL_DYNAMIC_DRAW);
 
+        glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(AsteroidInstance),
+            (void*)offsetof(AsteroidInstance, offset));
+        glEnableVertexAttribArray(3);
+        glVertexAttribDivisor(3, 1);
 
+        glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, sizeof(AsteroidInstance),
+            (void*)offsetof(AsteroidInstance, scale));
+        glEnableVertexAttribArray(4);
+        glVertexAttribDivisor(4, 1);
+
+        glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, sizeof(AsteroidInstance),
+            (void*)offsetof(AsteroidInstance, rotation));
+        glEnableVertexAttribArray(5);
+        glVertexAttribDivisor(5, 1);
+
+        //buffer
         std::vector<float> ringVertices;
         for (int i = 0; i <= ORBIT_RES; i++) {
             float angle = 2.0f * PI * i / ORBIT_RES;
             float x = cos(angle);
             float y = sin(angle);
 
-            ringVertices.push_back(x);
-            ringVertices.push_back(y);
-            ringVertices.push_back(x);
-            ringVertices.push_back(y);
-            ringVertices.push_back(0.0f);
+            ringVertices.insert(ringVertices.end(), {
+                x, y,           //pos
+                x, y, 0.0f      //normal
+                });
         }
-
 
         glGenVertexArrays(1, &ringVAO);
         glGenBuffers(1, &ringVBO);
@@ -589,44 +658,31 @@ private:
             (void*)(2 * sizeof(float)));
         glEnableVertexAttribArray(1);
 
-        std::vector<float> asteroidVertices;
-        for (int i = 0; i < ORBIT_RES / 2; i++) {
-            float angle = 2.0f * PI * i / (ORBIT_RES / 2);
-            float x = cos(angle);
-            float y = sin(angle);
-            float u = angle / (2.0f * PI);
-            float v = 0.5f + y * 0.5f;
-
-            // Calculate proper normal for lighting
-            float len = sqrt(x * x + y * y);
-            float nx = x / len;
-            float ny = y / len;
-            float nz = 0.0f;
-
-            // Position
-            asteroidVertices.push_back(x);
-            asteroidVertices.push_back(y);
-            // Normal
-            asteroidVertices.push_back(nx);
-            asteroidVertices.push_back(ny);
-            asteroidVertices.push_back(nz);
-            // Texture coordinates
-            asteroidVertices.push_back(u);
-            asteroidVertices.push_back(v);
+        // Pluto orbit buffer setup
+        std::vector<float> plutoOrbitVertices;
+        for (int i = 0; i <= ORBIT_RES; i++) {
+            float angle = 2.0f * PI * i / ORBIT_RES;
+            float x = 16.5f * cos(angle) - 3.0f;
+            float y = 12.3f * 0.9f * sin(angle) + 1.2f;
+            plutoOrbitVertices.insert(plutoOrbitVertices.end(), {
+                x, y,
+                x / sqrt(x * x + y * y),
+                y / sqrt(x * x + y * y),
+                0.0f
+                });
         }
-        glGenVertexArrays(1, &asteroidVAO);
-        glGenBuffers(1, &asteroidVBO);
-        glBindVertexArray(asteroidVAO);
-        glBindBuffer(GL_ARRAY_BUFFER, asteroidVBO);
-        glBufferData(GL_ARRAY_BUFFER, asteroidVertices.size() * sizeof(float),
-            asteroidVertices.data(), GL_STATIC_DRAW);
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)0);
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)(2 * sizeof(float)));
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)(5 * sizeof(float)));
-        glEnableVertexAttribArray(2);
 
+        glGenVertexArrays(1, &plutoOrbitVAO);
+        glGenBuffers(1, &plutoOrbitVBO);
+        glBindVertexArray(plutoOrbitVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, plutoOrbitVBO);
+        glBufferData(GL_ARRAY_BUFFER, plutoOrbitVertices.size() * sizeof(float),
+            plutoOrbitVertices.data(), GL_STATIC_DRAW);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float),
+            (void*)(2 * sizeof(float)));
+        glEnableVertexAttribArray(1);
     }
     void drawMoon(const Moon& moon, const glm::mat4& planetModel, float time, bool showOrbits) {
         shader->use();
@@ -838,6 +894,7 @@ public:
     void setTimeScale(float scale) { timeScale = scale; }
     Renderer(float& zoomRef) : zoomLevel(zoomRef), simulationPaused(false), timeScale(1.0f) {
         shader = std::make_unique<Shader>(vertexShaderSource, fragmentShaderSource);
+        instancedShader = std::make_unique<Shader>(instancedVertexShaderSource, fragmentShaderSource);
         setupBuffers();
 
         view = glm::lookAt(
@@ -1008,81 +1065,99 @@ public:
     }
 
     void initializeAsteroidBelts() {
+        //clear for new instances (no duplicates, eg. resize window)
+        asteroidInstances.clear();
 
+        
         AsteroidBelt mainBelt{
             "Main Asteroid Belt",
-            6.3f,  // minRadius 
-            9.9f,  // maxRadius
-            1500,   // numAsteroids
-            {},    // asteroids vector
-            glm::vec3(0.6f, 0.6f, 0.6f),  // color
+            6.3f,   //minRadius 
+            9.9f,   //maxRadius
+            1000,   //numAsteroids
+            {},     //vector
+            glm::vec3(0.6f, 0.6f, 0.6f),  //color
             "\nLocated between Mars and Jupiter\nContains millions of asteroids"
         };
 
-       
+        
         AsteroidBelt kuiperBelt{
             "Kuiper Belt",
-            138.0f,  // minRadius 
-             198.0f,  // maxRadius
-            10000,   // numAsteroids
-            {},    // asteroids vector
-            glm::vec3(0.6f, 0.6f, 0.6f),  // color
+            138.0f,  //minRadius 
+            198.0f,  //maxRadius
+            150000,   //numAsteroids
+            {},      //vector
+            glm::vec3(0.6f, 0.6f, 0.6f),  //color
             "\nBeyond Neptune's orbit\nHome to many dwarf planets"
         };
 
-        //random asteroids for each belt
+       
         for (auto& belt : { &mainBelt, &kuiperBelt }) {
             for (int i = 0; i < belt->numAsteroids; i++) {
+                
                 float radius = belt->minRadius + static_cast<float>(rand()) / RAND_MAX * (belt->maxRadius - belt->minRadius);
-                float size = 0.002f + static_cast<float>(rand()) / RAND_MAX * 0.02f;
+                float size = 0.004f + static_cast<float>(rand()) / RAND_MAX * 0.02f;
                 float speed = 0.002f + static_cast<float>(rand()) / RAND_MAX * 0.004f;
                 float offset = static_cast<float>(rand()) / RAND_MAX * 2 * PI;
 
+                
                 belt->asteroids.push_back({ radius, size, speed, offset });
+
+                
+                AsteroidInstance instance;
+                instance.offset = glm::vec2(0.0f);   
+                instance.scale = size;                 
+                instance.rotation = offset;            
+                asteroidInstances.push_back(instance);
             }
         }
 
+        
         asteroidBelts = { mainBelt, kuiperBelt };
+
+       
+        glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
+        glBufferData(GL_ARRAY_BUFFER, asteroidInstances.size() * sizeof(AsteroidInstance),
+            asteroidInstances.data(), GL_DYNAMIC_DRAW);
     }
 
     void drawAsteroidBelts(float time) {
-        shader->use();
-        shader->setVec3("lightPos", glm::vec3(0.0f, 0.0f, 0.0f));
-        shader->setFloat("ambientStrength", 0.5f);
-        shader->setBool("isLightSource", false);
+        instancedShader->use();
+        instancedShader->setVec3("lightPos", glm::vec3(0.0f));
+        instancedShader->setFloat("ambientStrength", 0.5f);
+        instancedShader->setBool("isLightSource", false);
+        instancedShader->setMat4("view", view);
+        instancedShader->setMat4("projection", projection);
 
-        // Apply asteroid texture
+        //texture
         if (textures.find("Asteroid") != textures.end()) {
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, textures["Asteroid"]);
-            shader->setBool("useTexture", true);
+            instancedShader->setBool("useTexture", true);
         }
 
-        glBindVertexArray(asteroidVAO);
-
+        //update instance data (rotation to match orbital movement, all gpu instance data stays in sync)
+        size_t instanceIndex = 0;
         for (const auto& belt : asteroidBelts) {
-            shader->setVec3("uCol", belt.color);
-
             for (const auto& asteroid : belt.asteroids) {
                 float angle = time * asteroid.orbitSpeed + asteroid.orbitOffset;
-
-                glm::mat4 model = glm::translate(glm::mat4(1.0f),
-                    glm::vec3(asteroid.orbitRadius * cos(angle),
-                        asteroid.orbitRadius * sin(angle), 0.0f));
-
-                model = glm::rotate(model, angle * 0.5f + asteroid.orbitOffset,
-                    glm::vec3(0.0f, 0.0f, 1.0f));
-
-                model = glm::scale(model, glm::vec3(asteroid.size));
-
-                shader->setMat4("model", model);
-                glDrawArrays(GL_TRIANGLE_FAN, 0, ORBIT_RES / 2);
+                asteroidInstances[instanceIndex].offset = glm::vec2(
+                    asteroid.orbitRadius * cos(angle),
+                    asteroid.orbitRadius * sin(angle)
+                );
+                asteroidInstances[instanceIndex].rotation = angle * 0.5f + asteroid.orbitOffset;
+                instanceIndex++;
             }
         }
 
+        glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
+        glBufferData(GL_ARRAY_BUFFER, asteroidInstances.size() * sizeof(AsteroidInstance),
+            asteroidInstances.data(), GL_DYNAMIC_DRAW);
+
+        glBindVertexArray(asteroidVAO);
+        glDrawArraysInstanced(GL_TRIANGLE_FAN, 0, ORBIT_RES / 2, asteroidInstances.size());
 
         glBindTexture(GL_TEXTURE_2D, 0);
-        shader->setBool("useTexture", false);
+        instancedShader->setBool("useTexture", false);
     }
 
     const std::vector<AsteroidBelt>& getAsteroidBelts() const {
@@ -1619,7 +1694,7 @@ int main() {
     //        false - whether to draw orbit line
     //        "The Sun: Mass..." - information text shown when clicked
 
-    textRenderer = std::make_unique<TextRenderer>("C:/Windows/Fonts/arial.ttf");
+    textRenderer = std::make_unique<TextRenderer>("arial.ttf");
     glfwSetWindowPos(window, windowPosX, windowPosY);
     solarSystem = {
         // Sun
