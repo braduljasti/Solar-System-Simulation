@@ -29,6 +29,8 @@
 //DODATNE BIBLIOTEKE: 
 //Freetype (text), stb_image.h(texture)
 
+
+//comment for commit
 #include <iostream>
 #include <fstream>
 #include <sstream>
