@@ -24,8 +24,14 @@
 //+- -> zumiraj/odzumiraj
 //Lijevi klik na nebesko tijelo -> prikazuje informacije o tom tijelu
 //
+// 
+// 
+// 
+// 
+// 
+// 
 //ZA POKRETANJE PROJEKTA IZBRISATI PACKAGES FOLDER, UCI U .SLN PONOVO I KLIKNUTI DESNIM KLIKOM NA SOLUTION I "RESTORE PACKAGES"
-//za font,program koristi putanju "C:/Windows/Fonts/"
+//program koristi arial font
 //DODATNE BIBLIOTEKE: 
 //Freetype (text), stb_image.h(texture) su unutar Solution env
 
@@ -37,6 +43,7 @@
 #include <vector>
 #include <memory>
 #include <GL/glew.h>
+#define GLM_ENABLE_EXPERIMENTAL
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
