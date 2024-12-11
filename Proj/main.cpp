@@ -35,6 +35,7 @@
 //DODATNE BIBLIOTEKE: 
 //Freetype (text), stb_image.h(texture) su unutar Solution env
 
+//another one
 
 //comment for commit
 #include <iostream>
@@ -56,6 +57,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #include <thread>
+#include <random>
 
 
 
@@ -546,7 +548,7 @@ private:
     std::unique_ptr<Shader> instancedShader;
 
     void setupBuffers() {
-     
+
         std::vector<float> circleVertices;
         for (int i = 0; i <= ORBIT_RES; i++) {
             float angle = 2.0f * PI * i / ORBIT_RES;
@@ -609,7 +611,7 @@ private:
 
         glBindVertexArray(asteroidVAO);
 
-        
+
         glBindBuffer(GL_ARRAY_BUFFER, asteroidVBO);
         glBufferData(GL_ARRAY_BUFFER, asteroidVertices.size() * sizeof(float),
             asteroidVertices.data(), GL_STATIC_DRAW);
@@ -1075,7 +1077,7 @@ public:
         //clear for new instances (no duplicates, eg. resize window)
         asteroidInstances.clear();
 
-        
+
         AsteroidBelt mainBelt{
             "Main Asteroid Belt",
             6.3f,   //minRadius 
@@ -1086,7 +1088,7 @@ public:
             "\nLocated between Mars and Jupiter\nContains millions of asteroids"
         };
 
-        
+
         AsteroidBelt kuiperBelt{
             "Kuiper Belt",
             138.0f,  //minRadius 
@@ -1097,31 +1099,31 @@ public:
             "\nBeyond Neptune's orbit\nHome to many dwarf planets"
         };
 
-       
+
         for (auto& belt : { &mainBelt, &kuiperBelt }) {
             for (int i = 0; i < belt->numAsteroids; i++) {
-                
+
                 float radius = belt->minRadius + static_cast<float>(rand()) / RAND_MAX * (belt->maxRadius - belt->minRadius);
                 float size = 0.004f + static_cast<float>(rand()) / RAND_MAX * 0.02f;
                 float speed = 0.002f + static_cast<float>(rand()) / RAND_MAX * 0.004f;
                 float offset = static_cast<float>(rand()) / RAND_MAX * 2 * PI;
 
-                
+
                 belt->asteroids.push_back({ radius, size, speed, offset });
 
-                
+
                 AsteroidInstance instance;
-                instance.offset = glm::vec2(0.0f);   
-                instance.scale = size;                 
-                instance.rotation = offset;            
+                instance.offset = glm::vec2(0.0f);
+                instance.scale = size;
+                instance.rotation = offset;
                 asteroidInstances.push_back(instance);
             }
         }
 
-        
+
         asteroidBelts = { mainBelt, kuiperBelt };
 
-       
+
         glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
         glBufferData(GL_ARRAY_BUFFER, asteroidInstances.size() * sizeof(AsteroidInstance),
             asteroidInstances.data(), GL_DYNAMIC_DRAW);
@@ -1195,7 +1197,6 @@ public:
 };
 
 
-
 class StarfieldBackground {
 private:
     struct Star {
@@ -1204,83 +1205,129 @@ private:
         float twinkleSpeed;
         float twinklePhase;
         glm::vec3 color;
+        float padding;
     };
 
-
-
     const std::vector<glm::vec3> starColors = {
-  glm::vec3(0.85f, 0.90f, 1.00f),  // Blue-white (O type)
-  glm::vec3(1.00f, 1.00f, 1.00f),  // White (A type)
-  glm::vec3(1.00f, 0.95f, 0.80f),  // Yellow-white (F type)
-  glm::vec3(1.00f, 0.85f, 0.60f),  // Yellow (G type)
-  glm::vec3(1.00f, 0.75f, 0.40f),  // Orange (K type)
-  glm::vec3(1.00f, 0.50f, 0.20f),  // Red (M type)
-  glm::vec3(0.70f, 0.70f, 1.00f),  // Blue giants
-  glm::vec3(0.90f, 0.60f, 0.60f)   // Red giants
+        {0.85f, 0.90f, 1.00f},  // O type (Blue-white supergiant)
+        {1.00f, 1.00f, 1.00f},  // A type (White)
+        {1.00f, 0.95f, 0.80f},  // F type (Yellow-white)
+        {1.00f, 0.85f, 0.60f},  // G type (Yellow dwarf)
+        {1.00f, 0.75f, 0.40f},  // K type (Orange dwarf)
+        {1.00f, 0.50f, 0.20f},  // M type (Red dwarf)
+        {0.70f, 0.70f, 1.00f},  // Blue giant
+        {0.90f, 0.60f, 0.60f}   // Red giant
     };
 
     std::vector<Star> stars;
-    unsigned int starVAO, starVBO;
+    GLuint starVAO, starVBO, instanceVBO;
     std::unique_ptr<Shader> starShader;
+    size_t numStars;
+    std::vector<float> instanceData;
 
-    const char* starVertexShader = R"(
+    static constexpr const char* starVertexShader = R"(
         #version 330 core
         layout (location = 0) in vec2 aPos;
+        layout (location = 1) in vec4 aInstanceData;
+        
         uniform mat4 view;
         uniform mat4 projection;
-        uniform float brightness;
         
         out float starBrightness;
+        out float colorIndex;
         
         void main() {
-            gl_Position = projection * view * vec4(aPos, 0.0, 1.0);
-            starBrightness = brightness;
+            vec2 pos = vec2(aInstanceData.x, aInstanceData.y);
+            gl_Position = projection * view * vec4(pos, 0.0, 1.0);
+            starBrightness = aInstanceData.z;
+            colorIndex = aInstanceData.w;
+            gl_PointSize = 3.0;
         }
     )";
 
-    const char* starFragmentShader = R"(
+    static constexpr const char* starFragmentShader = R"(
         #version 330 core
         in float starBrightness;
-        uniform vec3 starColor;
+        in float colorIndex;
+        
+        uniform vec3 starColors[8];
+        
         out vec4 FragColor;
         
         void main() {
-            FragColor = vec4(starColor * starBrightness, starBrightness);
+            vec2 center = gl_PointCoord - vec2(0.5);
+            float dist = length(center);
+            float alpha = 1.0 - smoothstep(0.0, 0.5, dist);
+            vec3 color = starColors[int(colorIndex)];
+            FragColor = vec4(color * starBrightness *alpha*2.0 , alpha);
         }
     )";
 
-public:
-    StarfieldBackground(int numStars = 1000, float fieldSize = 200.0f) {
-        starShader = std::make_unique<Shader>(starVertexShader, starFragmentShader);
-
+    void initializeStars(float fieldSize) {
         stars.resize(numStars);
-        for (auto& star : stars) {
-            star.x = (float(rand()) / RAND_MAX * 2.0f - 1.0f) * fieldSize;
-            star.y = (float(rand()) / RAND_MAX * 2.0f - 1.0f) * fieldSize;
-            star.brightness = float(rand()) / RAND_MAX * 0.5f + 0.5f;
-            star.twinkleSpeed = float(rand()) / RAND_MAX * 2.0f + 1.0f;
-            star.twinklePhase = float(rand()) / RAND_MAX * 2.0f * PI;
-            // Randomly assign a star color
-            star.color = starColors[rand() % starColors.size()];
+        instanceData.resize(numStars * 4);
+
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_real_distribution<float> posDist(-fieldSize, fieldSize);
+        std::uniform_real_distribution<float> speedDist(1.0f, 3.0f);
+        std::uniform_real_distribution<float> phaseDist(0.0f, 2.0f * PI);
+
+        for (size_t i = 0; i < numStars; ++i) {
+            stars[i].x = posDist(gen);
+            stars[i].y = posDist(gen);
+            stars[i].brightness = 0.9f + gen() % 50 / 100.0f;
+            stars[i].twinkleSpeed = speedDist(gen);
+            stars[i].twinklePhase = phaseDist(gen);
+            int colorIdx = gen() % starColors.size();
+            stars[i].color = starColors[colorIdx];
+
+            size_t baseIndex = i * 4;
+            instanceData[baseIndex] = stars[i].x;
+            instanceData[baseIndex + 1] = stars[i].y;
+            instanceData[baseIndex + 2] = stars[i].brightness;
+            instanceData[baseIndex + 3] = colorIdx;
         }
+    }
 
-
+    void setupBuffers() {
         glGenVertexArrays(1, &starVAO);
         glGenBuffers(1, &starVBO);
+        glGenBuffers(1, &instanceVBO);
+
         glBindVertexArray(starVAO);
 
-        std::vector<float> vertices;
-        vertices.reserve(numStars * 2);
-        for (const auto& star : stars) {
-            vertices.push_back(star.x);
-            vertices.push_back(star.y);
+        float point[] = { 0.0f, 0.0f };
+        glBindBuffer(GL_ARRAY_BUFFER, starVBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(point), point, GL_STATIC_DRAW);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
+        glEnableVertexAttribArray(0);
+
+        glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
+        glBufferData(GL_ARRAY_BUFFER, instanceData.size() * sizeof(float), instanceData.data(), GL_DYNAMIC_DRAW);
+
+        glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, 0);
+        glEnableVertexAttribArray(1);
+        glVertexAttribDivisor(1, 1);
+    }
+
+    void updateInstanceData(float currentTime) {
+        for (size_t i = 0; i < numStars; ++i) {
+            float brightness = stars[i].brightness *
+                (0.8f + 0.0002f * sin(currentTime * stars[i].twinkleSpeed + stars[i].twinklePhase));
+
+            instanceData[i * 4 + 2] = brightness;
         }
 
-        glBindBuffer(GL_ARRAY_BUFFER, starVBO);
-        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
+        glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, instanceData.size() * sizeof(float), instanceData.data());
+    }
 
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
-        glEnableVertexAttribArray(0);
+public:
+    StarfieldBackground(size_t count = 1000, float fieldSize = 200.0f) : numStars(count) {
+        starShader = std::make_unique<Shader>(starVertexShader, starFragmentShader);
+        initializeStars(fieldSize);
+        setupBuffers();
     }
 
     void render(const glm::mat4& view, const glm::mat4& projection, float currentTime) {
@@ -1288,28 +1335,29 @@ public:
         starShader->setMat4("view", view);
         starShader->setMat4("projection", projection);
 
-        glBindVertexArray(starVAO);
-        glPointSize(2.0f);
-
-        for (size_t i = 0; i < stars.size(); i++) {
-            float brightness = stars[i].brightness *
-                (0.8f + 0.2f * sin(currentTime * stars[i].twinkleSpeed + stars[i].twinklePhase));
-
-            starShader->setFloat("brightness", brightness);
-            starShader->setVec3("starColor", stars[i].color);
-            glDrawArrays(GL_POINTS, i, 1);
+        for (size_t i = 0; i < starColors.size(); i++) {
+            starShader->setVec3(("starColors[" + std::to_string(i) + "]").c_str(), starColors[i]);
         }
+
+        updateInstanceData(currentTime);
+
+        glBindVertexArray(starVAO);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_ONE, GL_ONE);
+        glEnable(GL_PROGRAM_POINT_SIZE);
+
+        glDrawArraysInstanced(GL_POINTS, 0, 1, numStars);
+
+        glDisable(GL_BLEND);
+        glDisable(GL_PROGRAM_POINT_SIZE);
     }
 
     ~StarfieldBackground() {
         glDeleteVertexArrays(1, &starVAO);
         glDeleteBuffers(1, &starVBO);
+        glDeleteBuffers(1, &instanceVBO);
     }
 };
-
-
-
-
 
 
 
@@ -1538,15 +1586,7 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
 
     selectedObjectInfo = "";
 
-
-    for (const auto& belt : renderer->getAsteroidBelts()) {
-        float dist = sqrt(worldX * worldX + worldY * worldY);
-        if (dist >= belt.minRadius && dist <= belt.maxRadius) {
-            selectedObjectInfo = belt.name;
-            return;
-        }
-    }
-
+    //Check for overlaping planets and moons (with asteroid belt)-priority "click"
     for (const auto& obj : solarSystem) {
         float planetAngle = currentTime * obj.orbitSpeed;
         float planetX, planetY;
@@ -1579,14 +1619,23 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
             }
         }
 
+
         float distance = sqrt(pow(worldX - planetX, 2) + pow(worldY - planetY, 2));
         if (distance < obj.radius * 2.5f) {
             selectedObjectInfo = obj.name;
             return;
         }
     }
-}
 
+
+    for (const auto& belt : renderer->getAsteroidBelts()) {
+        float dist = sqrt(worldX * worldX + worldY * worldY);
+        if (dist >= belt.minRadius && dist <= belt.maxRadius) {
+            selectedObjectInfo = belt.name;
+            return;
+        }
+    }
+}
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
         if (!selectedObjectInfo.empty()) {
@@ -1633,19 +1682,14 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 }
 
 void limitFPS(double desiredFPS) {
-    static double lastTime = glfwGetTime();
+    static double lastFrameTime = glfwGetTime();
     const double frameTime = 1.0 / desiredFPS;
 
-
-    while (true) {
-        double currentTime = glfwGetTime();
-        if (currentTime - lastTime >= frameTime) {
-            lastTime = currentTime;
-            break;
-        }
-
+    while (glfwGetTime() - lastFrameTime < frameTime) {
         std::this_thread::yield();
     }
+
+    lastFrameTime = glfwGetTime();
 }
 
 int main() {
@@ -1706,97 +1750,98 @@ int main() {
     solarSystem = {
         // Sun
         {"Sun", 0.5f, 0.0f, 0.0f, 0.28f * (365.26 / 27), {1.0f, 0.8f, 0.0f}, false,
-         "\nMass = 1.989 × 10^30 kg\nDiameter: 1.39 million km\nType: Yellow Dwarf Star\nSurface Temperature: 5,778 K\nContains 99.86% of solar system's mass"},
+         "\nMass = 1.989   10^30 kg\nDiameter: 1.39 million km\nType: Yellow Dwarf Star\nSurface Temperature: 5,778 K\nContains 99.86% of solar system's mass"},
 
          // Mercury
          {"Mercury", 0.027f, 1.5461f, 0.0712f, 0.0294f, {0.7f, 0.7f, 0.7f}, true,
-          "\nMass: 3.285 × 10^23 kg\nDiameter: 4,879 km\nType: Terrestrial Planet\nSmallest planet\nSurface Temperature: -180°C to 430°C\nNo moons"},
+          "\nMass: 3.285   10^23 kg\nDiameter: 4,879 km\nType: Terrestrial Planet\nSmallest planet\nSurface Temperature: -180 C to 430 C\nNo moons"},
 
           // Venus
           {"Venus", 0.067f, 2.169f, 0.0279f, -0.0071f, {0.9f, 0.7f, 0.5f}, true,
-           "\nMass: 4.867 × 10^24 kg\nDiameter: 12,104 km\nType: Terrestrial Planet\nHottest planet\nRotates backwards\nThick atmosphere of CO2"},
+           "\nMass: 4.867   10^24 kg\nDiameter: 12,104 km\nType: Terrestrial Planet\nHottest planet\nRotates backwards\nThick atmosphere of CO2"},
 
            // Earth
            {"Earth", 0.07f, 3.0f, 0.0172f, 6.28f, {0.2f, 0.5f, 1.0f}, true,
-            "\nMass: 5.972 × 10^24 kg\nDiameter: 12,742 km\nType: Terrestrial Planet\nOnly known planet with life\nAge: 4.54 billion years",
+            "\nMass: 5.972   10^24 kg\nDiameter: 12,742 km\nType: Terrestrial Planet\nOnly known planet with life\nAge: 4.54 billion years",
             false, 0.0f, 0.0f, {0.0f, 0.0f, 0.0f},
             {{"Moon", 0.019f, 0.28f, 0.1f, {0.8f, 0.8f, 0.8f}, "moon",
-              "\nMass: 7.34767 × 10^22 kg\nDiameter: 3,474 km\nType: Natural Satellite\nDistance: 384,400 km\nAge: 4.51 billion years\nOnly natural satellite of Earth"}}},
+              "\nMass: 7.34767   10^22 kg\nDiameter: 3,474 km\nType: Natural Satellite\nDistance: 384,400 km\nAge: 4.51 billion years\nOnly natural satellite of Earth"}}},
 
               // Mars
               {"Mars", 0.037f, 4.572f, 0.0091f, 6.10f, {1.0f, 0.4f, 0.0f}, true,
-               "\nMass: 6.39 × 10^23 kg\nDiameter: 6,779 km\nType: Terrestrial Planet\nThe Red Planet\nHas the largest volcano\nTwo moons",
+               "\nMass: 6.39   10^23 kg\nDiameter: 6,779 km\nType: Terrestrial Planet\nThe Red Planet\nHas the largest volcano\nTwo moons",
                false, 0.0f, 0.0f, {0.0f, 0.0f, 0.0f},
                {{"Phobos", 0.005f, 0.09f, 0.2f, {0.6f, 0.6f, 0.6f}, "phobos",
-                 "\nMass: 1.06 × 10^16 kg\nDiameter: 22.2 km\nType: Natural Satellite\nLargest moon of Mars\nIrregular shape\nSpiraling closer to Mars"},
+                 "\nMass: 1.06   10^16 kg\nDiameter: 22.2 km\nType: Natural Satellite\nLargest moon of Mars\nIrregular shape\nSpiraling closer to Mars"},
                 {"Deimos", 0.003f, 0.12f, 0.15f, {0.5f, 0.5f, 0.5f}, "deimos",
-                 "\nMass: 1.48 × 10^15 kg\nDiameter: 12.6 km\nType: Natural Satellite\nSmooth surface\nSlow orbit\nGradually moving away from Mars"}}},
+                 "\nMass: 1.48   10^15 kg\nDiameter: 12.6 km\nType: Natural Satellite\nSmooth surface\nSlow orbit\nGradually moving away from Mars"}}},
 
                  // Jupiter
                  {"Jupiter", 0.284f, 15.609f, 0.00145f, 15.32f, {0.8f, 0.7f, 0.6f}, true,
-                  "\nMass: 1.898 × 10^27 kg\nDiameter: 139,820 km\nType: Gas Giant\nLargest planet\nGreat Red Spot is a giant storm\n79 known moons",
+                  "\nMass: 1.898   10^27 kg\nDiameter: 139,820 km\nType: Gas Giant\nLargest planet\nGreat Red Spot is a giant storm\n79 known moons",
                   false, 0.0f, 0.0f, {0.0f, 0.0f, 0.0f},
                   {{"Io", 0.02f, 0.42f, 0.15f, {1.0f, 1.0f, 0.6f}, "io",
-                    "\nMass: 8.93 × 10^22 kg\nDiameter: 3,642 km\nType: Galilean Moon\nMost volcanic body\nSurface temperature: -130°C to -150°C\nOver 400 active volcanoes"},
+                    "\nMass: 8.93   10^22 kg\nDiameter: 3,642 km\nType: Galilean Moon\nMost volcanic body\nSurface temperature: -130 C to -150 C\nOver 400 active volcanoes"},
                    {"Europa", 0.018f, 0.525f, 0.12f, {0.9f, 0.9f, 0.9f}, "europa",
-                    "\nMass: 4.8 × 10^22 kg\nDiameter: 3,122 km\nType: Galilean Moon\nSmooth ice surface\nPossibly contains subsurface ocean\nThinnest atmosphere of Galilean moons"},
+                    "\nMass: 4.8   10^22 kg\nDiameter: 3,122 km\nType: Galilean Moon\nSmooth ice surface\nPossibly contains subsurface ocean\nThinnest atmosphere of Galilean moons"},
                    {"Ganymede", 0.029f, 0.63f, 0.10f, {0.8f, 0.8f, 0.7f}, "ganymede",
-                    "\nMass: 1.48 × 10^23 kg\nDiameter: 5,268 km\nType: Galilean Moon\nLargest moon in solar system\nHas its own magnetic field\nLarger than Mercury"},
+                    "\nMass: 1.48   10^23 kg\nDiameter: 5,268 km\nType: Galilean Moon\nLargest moon in solar system\nHas its own magnetic field\nLarger than Mercury"},
                    {"Callisto", 0.026f, 0.735f, 0.08f, {0.6f, 0.6f, 0.6f}, "callisto",
-                    "\nMass: 1.08 × 10^23 kg\nDiameter: 4,821 km\nType: Galilean Moon\nMost heavily cratered object\nPossibly has subsurface ocean\nOldest Galilean moon"}}},
-
+                    "\nMass: 1.08   10^23 kg\nDiameter: 4,821 km\nType: Galilean Moon\nMost heavily cratered object\nPossibly has subsurface ocean\nOldest Galilean moon"}}},
+                    //missing other smaller planetary bodies (ceres, vesta, pallas etc)
+                    // orbits of planets need to be refactored (e.g. earth)
                     // Saturn
                     {"Saturn", 0.24f, 28.746f, 0.00058f, 14.11f, {0.9f, 0.8f, 0.5f}, true,
-                     "\nMass: 5.683 × 10^26 kg\nDiameter: 116,460 km\nType: Gas Giant\nKnown for its rings\nLeast dense planet\n82 known moons",
+                     "\nMass: 5.683   10^26 kg\nDiameter: 116,460 km\nType: Gas Giant\nKnown for its rings\nLeast dense planet\n82 known moons",
                      true, 0.225f, 0.375f, {0.8f, 0.6f, 0.2f},
                      {{"Enceladus", 0.004f, 1.5f, 0.12f, {1.0f, 1.0f, 1.0f}, "enceladus",
-                       "\nMass: 1.08 × 10^20 kg\nDiameter: 504 km\nType: Natural Satellite\nIce geysers\nSubsurface ocean\nReflects 99% of sunlight"},
+                       "\nMass: 1.08   10^20 kg\nDiameter: 504 km\nType: Natural Satellite\nIce geysers\nSubsurface ocean\nReflects 99% of sunlight"},
                       {"Tethys", 0.006f, 1.8f, 0.11f, {0.9f, 0.9f, 0.9f}, "tethys",
-                       "\nMass: 6.17 × 10^20 kg\nDiameter: 1,062 km\nType: Natural Satellite\nLarge impact crater\nIcy surface\nHeavily cratered"},
+                       "\nMass: 6.17   10^20 kg\nDiameter: 1,062 km\nType: Natural Satellite\nLarge impact crater\nIcy surface\nHeavily cratered"},
                       {"Rhea", 0.008f, 1.95f, 0.10f, {0.7f, 0.7f, 0.7f},"rhea",
-                       "\nMass: 2.31 × 10^21 kg\nDiameter: 1,527 km\nType: Natural Satellite\nSaturn's 2nd largest\nWater ice surface\nThin atmosphere"},
+                       "\nMass: 2.31   10^21 kg\nDiameter: 1,527 km\nType: Natural Satellite\nSaturn's 2nd largest\nWater ice surface\nThin atmosphere"},
                       {"Titan", 0.028f, 2.07f, 0.08f, {0.8f, 0.7f, 0.5f}, "titan",
-                       "\nMass: 1.34 × 10^23 kg\nDiameter: 5,150 km\nType: Natural Satellite\nDense atmosphere\nLiquid methane lakes\nEarth-like features"},
+                       "\nMass: 1.34   10^23 kg\nDiameter: 5,150 km\nType: Natural Satellite\nDense atmosphere\nLiquid methane lakes\nEarth-like features"},
                       {"Iapetus", 0.008f, 2.39f, 0.06f, {0.5f, 0.5f, 0.5f}, "iapetus",
-                       "\nMass: 1.81 × 10^21 kg\nDiameter: 1,469 km\nType: Natural Satellite\nTwo-toned surface\nEquatorial ridge\nWalnut shape"}}},
+                       "\nMass: 1.81   10^21 kg\nDiameter: 1,469 km\nType: Natural Satellite\nTwo-toned surface\nEquatorial ridge\nWalnut shape"}}},
 
                        // Uranus
                        {"Uranus", 0.15f, 57.603f, 0.00020f, -8.72f, {0.5f, 0.8f, 0.8f}, true,
-                        "\nMass: 8.681 × 10^25 kg\nDiameter: 50,724 km\nType: Ice Giant\nRotates on its side\n27 known moons",
+                        "\nMass: 8.681   10^25 kg\nDiameter: 50,724 km\nType: Ice Giant\nRotates on its side\n27 known moons",
                         false, 0.0f, 0.0f, {0.0f, 0.0f, 0.0f},
                         {{"Miranda", 0.004f, 0.18f, 0.13f, {0.8f, 0.8f, 0.8f}, "miranda",
-                          "\nMass: 6.59 × 10^19 kg\nDiameter: 472 km\nType: Natural Satellite\nDramatic cliffs\nUnique surface features\nYoungest Uranian moon"},
+                          "\nMass: 6.59   10^19 kg\nDiameter: 472 km\nType: Natural Satellite\nDramatic cliffs\nUnique surface features\nYoungest Uranian moon"},
                          {"Titania", 0.009f, 0.27f, 0.11f, {0.7f, 0.7f, 0.7f}, "titania",
-                          "\nMass: 3.4 × 10^21 kg\nDiameter: 1,578 km\nType: Natural Satellite\nLargest Uranian moon\nScarped valleys\nIcy surface"},
+                          "\nMass: 3.4   10^21 kg\nDiameter: 1,578 km\nType: Natural Satellite\nLargest Uranian moon\nScarped valleys\nIcy surface"},
                          {"Oberon", 0.008f, 0.33f, 0.09f, {0.6f, 0.6f, 0.6f}, "oberon",
-                          "\nMass: 3.08 × 10^21 kg\nDiameter: 1,522 km\nType: Natural Satellite\nOutermost major moon\nCraters with dark floors\nOldest Uranian moon"}}},
+                          "\nMass: 3.08   10^21 kg\nDiameter: 1,522 km\nType: Natural Satellite\nOutermost major moon\nCraters with dark floors\nOldest Uranian moon"}}},
 
                           // Neptune
                           {"Neptune", 0.14f, 90.141f, 0.00010f, 9.37f, {0.0f, 0.0f, 0.8f}, true,
-                           "\nMass: 1.024 × 10^26 kg\nDiameter: 49,244 km\nType: Ice Giant\nWindiest planet\nDarkest ring system\n14 known moons",
+                           "\nMass: 1.024   10^26 kg\nDiameter: 49,244 km\nType: Ice Giant\nWindiest planet\nDarkest ring system\n14 known moons",
                            false, 0.0f, 0.0f, {0.0f, 0.0f, 0.0f},
                            {{"Triton", 0.015f, 0.33f, -0.07f, {0.9f, 0.9f, 1.0f}, "triton",
-                             "\nMass: 2.14 × 10^22 kg\nDiameter: 2,707 km\nType: Natural Satellite\nRetrograde orbit\nNitrogen geysers\nLikely captured Kuiper Belt object"}}},
+                             "\nMass: 2.14   10^22 kg\nDiameter: 2,707 km\nType: Natural Satellite\nRetrograde orbit\nNitrogen geysers\nLikely captured Kuiper Belt object"}}},
 
                              // Pluto
                              {"Pluto", 0.013f, 118.446f, 0.000069f, 0.983f, {0.8f, 0.7f, 0.7f}, true,
-                              "\nMass: 1.303 × 10^22 kg\nDiameter: 2,377 km\nType: Dwarf Planet\nDue to orbital resonance, cannot collide with Neptune or Eris\n5 known moons",
+                              "\nMass: 1.303   10^22 kg\nDiameter: 2,377 km\nType: Dwarf Planet\nDue to orbital resonance, cannot collide with Neptune or Eris\n5 known moons",
                               false, 0.0f, 0.0f, {0.0f, 0.0f, 0.0f},
                               {{"Charon", 0.006f, 0.075f, 0.08f, {0.7f, 0.7f, 0.7f}, "charon",
-                                "\nMass: 1.586 × 10^21 kg\nDiameter: 1,212 km\nType: Natural Satellite\nTidally locked with Pluto\nLargest moon relative to parent body"},
+                                "\nMass: 1.586   10^21 kg\nDiameter: 1,212 km\nType: Natural Satellite\nTidally locked with Pluto\nLargest moon relative to parent body"},
                                {"Nix", 0.001f, 0.105f, 0.1f, {0.6f, 0.6f, 0.6f}, "nix",
-                                "\nMass: ~5 × 10 ^ 16 kg\nDiameter : ~50 km\nType : Natural Satellite\nRapid rotation\nHighly reflective surface\nIrregular shape"}}},
+                                "\nMass: ~5   10 ^ 16 kg\nDiameter : ~50 km\nType : Natural Satellite\nRapid rotation\nHighly reflective surface\nIrregular shape"}}},
 
                                 // Eris
                                 {"Eris", 0.012f, 203.343f, 0.000054f, 0.932f, {0.85f, 0.85f, 0.85f}, true,
-                                 "\nMass: 1.67 × 10^22 kg\nDiameter: 2,326 km\nType: Dwarf Planet\nMore massive than Pluto\nOrbital mechanics prevent collision with Pluto\nHighly eccentric orbit",
+                                 "\nMass: 1.67   10^22 kg\nDiameter: 2,326 km\nType: Dwarf Planet\nMore massive than Pluto\nOrbital mechanics prevent collision with Pluto\nHighly eccentric orbit",
                                  false, 0.0f, 0.0f, {0.0f, 0.0f, 0.0f},
                                  {{"Dysnomia", 0.002f, 0.06f, 0.09f, {0.6f, 0.6f, 0.6f}, "dysnomia",
-                                   "\nMass: ~2 × 10^19 kg\nDiameter: ~700 km\nType: Natural Satellite\nNamed after daughter of Eris\nOnly known moon of Eris\nVery little known about its composition"}}}
+                                   "\nMass: ~2   10^19 kg\nDiameter: ~700 km\nType: Natural Satellite\nNamed after daughter of Eris\nOnly known moon of Eris\nVery little known about its composition"}}}
     };
     renderer = std::make_unique<Renderer>(zoomLevel);
     renderer->initializeAsteroidBelts();
-    starfield = std::make_unique<StarfieldBackground>(2000, zoomLevel * 10.0f);
+    starfield = std::make_unique<StarfieldBackground>(100000, zoomLevel * 200.0f);
     double lastFrame = glfwGetTime();
     renderer->loadTextures();
     lastTime = glfwGetTime();
@@ -1824,7 +1869,7 @@ int main() {
 
 
         glClearColor(0.0f, 0.0f, 0.02f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         renderer->updateCamera();
 
@@ -1858,13 +1903,13 @@ int main() {
             glm::vec3(1.0f, 1.0f, 1.0f)
         );
 
-        
+
         textRenderer->RenderText(
             "FPS: " + std::to_string(currentFPS),
-            SCR_WIDTH - 150.0f,  
-            SCR_HEIGHT - 40.0f,  
+            SCR_WIDTH - 150.0f,
+            SCR_HEIGHT - 40.0f,
             1.0f,
-            glm::vec3(1.0f, 1.0f, 1.0f)  
+            glm::vec3(1.0f, 1.0f, 1.0f)
         );
 
         glDisable(GL_BLEND);
