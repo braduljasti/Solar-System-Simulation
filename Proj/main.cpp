@@ -61,6 +61,7 @@
 
 
 
+
 const unsigned int SCR_WIDTH = 1920;
 const unsigned int SCR_HEIGHT = 1040;
 const float PI = 3.14159265f;
@@ -69,11 +70,8 @@ const int ORBIT_RES = 100;
 // Shader sources
 const char* vertexShaderSource = R"(
 
-
-
 #version 330 core
 layout (location = 0) in vec2 aPos;
-
 layout (location = 2) in vec2 aTexCoords;
 
 out vec3 FragPos;
@@ -85,27 +83,20 @@ uniform mat4 view;
 uniform mat4 projection;
 
 void main() {
-   
     vec3 pos3D;
     float r = 1.0; 
     pos3D.x = aPos.x;
     pos3D.y = aPos.y;
-  
     pos3D.z = sqrt(max(0.0, r*r - aPos.x*aPos.x - aPos.y*aPos.y));
 
-  
     Normal = normalize(vec3(aPos.x, aPos.y, pos3D.z));
-    
-   
     mat3 normalMatrix = mat3(transpose(inverse(model)));
     Normal = normalize(normalMatrix * Normal);
 
-    FragPos = vec3(model * vec4(aPos.x, aPos.y, pos3D.z, 1.0));
-    
+    FragPos = vec3(model * vec4(pos3D, 1.0));
     TexCoords = aTexCoords;
-    gl_Position = projection * view * model * vec4(aPos.x, aPos.y, pos3D.z, 1.0);
+    gl_Position = projection * view * model * vec4(pos3D, 1.0);
 }
-
 
 
 )";
@@ -115,72 +106,86 @@ const char* fragmentShaderSource = R"(
 in vec3 FragPos;
 in vec3 Normal;
 in vec2 TexCoords;
-
 uniform vec3 uCol;
 uniform vec3 lightPos;
 uniform float ambientStrength;
 uniform bool isLightSource;
 uniform sampler2D texture1;
 uniform bool useTexture;
-
+uniform vec3 viewPos;
+uniform bool isRing;
 out vec4 FragColor;
 
 void main() {
-    if (isLightSource) {
-        if(useTexture) {
-            vec4 texColor = texture(texture1, TexCoords);
-            FragColor = vec4(uCol * texColor.rgb, 1.0);
-        } else {
-            FragColor = vec4(uCol, 1.0);
-        }
-        return;
-    }
+   if (isLightSource) {
+       if(useTexture) {
+           vec4 texColor = texture(texture1, TexCoords);
+           FragColor = vec4(uCol * texColor.rgb, 1.0);
+       } else {
+           FragColor = vec4(uCol, 1.0);
+       }
+       return;
+   }
 
-   
-    vec3 lightDir = normalize(lightPos - FragPos);
-    
-   
-    float diff = max(dot(Normal, lightDir), 0.0);
-    
-    
-    float distance = length(lightPos - FragPos);
-    float attenuation = 1.0 / (1.0 + 0.0009 * distance);
-    
-   
-    vec3 baseColor;
-    if(useTexture) {
-        baseColor = texture(texture1, TexCoords).rgb;
-    } else {
-        baseColor = uCol;
-    }
-    
-   
-    float darkSideAmbient = max(ambientStrength * 0.2, 0.08); 
-    
-   
-    vec3 ambient = darkSideAmbient * baseColor;
-    vec3 diffuse = diff * baseColor * 1.3; 
-    
-   
-    float shadowFactor = smoothstep(0.0, 0.2, diff);
-  
-    vec3 result = (ambient + (diffuse * attenuation * shadowFactor)) * baseColor;
-    
-   
-    float rim = 1.0 - max(dot(Normal, normalize(-FragPos)), 0.0);
-    rim = smoothstep(0.6, 1.0, rim);
-    vec3 rimColor = baseColor * rim * 0.25;
-    
-    result += rimColor;
-    
-    
-    result = max(result, baseColor * 0.1);
-    
-   
-    result = min(result, vec3(1.0));
-    
-    FragColor = vec4(result, 1.0);
+   vec3 baseColor;
+   if(useTexture) {
+       baseColor = texture(texture1, TexCoords).rgb;
+   } else {
+       baseColor = uCol;
+   }
+
+   if (isRing) {
+       vec3 lightDir = normalize(lightPos - FragPos);
+       float diff = max(dot(Normal, lightDir), 0.0);
+       
+       float ringAmbient = 0.1;
+       vec3 ringColor = baseColor * (ringAmbient + diff * 1.2);
+       
+       float reverseDiff = max(dot(-Normal, lightDir), 0.0);
+       ringColor += baseColor * reverseDiff * 0.1;
+       
+       FragColor = vec4(ringColor, 1.0);
+       return;
+   }
+
+   float darkSideAmbient = max(ambientStrength * 0.2, 0.08); 
+vec3 ambient = darkSideAmbient * baseColor;
+
+vec3 lightDir = normalize(lightPos - FragPos);
+float diff = max(dot(Normal, lightDir), 0.0);
+vec3 diffuse = diff * baseColor;
+
+vec3 viewDir = normalize(viewPos - FragPos);
+vec3 halfwayDir = normalize(lightDir + viewDir);
+float specularStrength = 15.0;
+float shininess = 12.0;
+float spec = pow(max(dot(Normal, halfwayDir), 0.0), shininess);
+vec3 specular = specularStrength * spec * vec3(1.0, 1.0, 1.0);
+
+float distance = length(lightPos - FragPos);
+float attenuation = 1.0 / (1.0 + 0.0009 * distance * distance);
+
+vec3 result = ambient * baseColor;
+result += (diffuse + specular) * attenuation;
+
+float rim = 1.0 - max(dot(Normal, viewDir), 0.0);
+rim = smoothstep(0.6, 1.0, rim);
+vec3 rimColor = baseColor * rim * 0.25;
+result += rimColor;
+
+result = max(result, baseColor * 0.1);
+result = min(result, vec3(1.0));
+
+FragColor = vec4(result, 1.0);
 }
+
+
+
+
+
+
+
+
 )";
 
 
@@ -546,6 +551,7 @@ private:
     unsigned int instanceVBO;
     std::vector<AsteroidInstance> asteroidInstances;
     std::unique_ptr<Shader> instancedShader;
+    glm::vec3 cameraPosition;
 
     void setupBuffers() {
 
@@ -781,6 +787,8 @@ private:
         shader->setVec3("lightPos", glm::vec3(0.0f, 0.0f, 0.0f));
         shader->setFloat("ambientStrength", 0.1f);
         shader->setBool("isLightSource", false);
+        shader->setBool("isRing", true);
+        shader->setVec3("viewPos", cameraPosition);
 
 
         shader->setBool("useTexture", false);
@@ -891,6 +899,7 @@ private:
 
         glBindTexture(GL_TEXTURE_2D, 0);
         shader->setBool("useTexture", false);
+        shader->setBool("isRing", false);
         glLineWidth(1.0f);
     }
 
@@ -902,6 +911,7 @@ public:
     void setSimulationPaused(bool paused) { simulationPaused = paused; }
     void setTimeScale(float scale) { timeScale = scale; }
     Renderer(float& zoomRef) : zoomLevel(zoomRef), simulationPaused(false), timeScale(1.0f) {
+        cameraPosition = glm::vec3(0.0f, 0.0f, zoomLevel);
         shader = std::make_unique<Shader>(vertexShaderSource, fragmentShaderSource);
         instancedShader = std::make_unique<Shader>(instancedVertexShaderSource, fragmentShaderSource);
         setupBuffers();
@@ -917,6 +927,11 @@ public:
         shader->use();
         shader->setMat4("view", view);
         shader->setMat4("projection", projection);
+      
+    }
+
+    void updateCameraPosition(const glm::vec3& pos) {
+        cameraPosition = pos;
     }
 
     void loadTextures() {
@@ -942,6 +957,13 @@ public:
         shader->use();
         shader->setVec3("lightPos", glm::vec3(0.0f, 0.0f, 0.0f));
         shader->setBool("isLightSource", obj.name == "Sun");
+       
+        shader->setVec3("viewPos", cameraPosition);
+
+        shader->setFloat("specularStrength", 0.5f);
+        shader->setFloat("shininess", 64.0f);
+     
+
 
         glBindVertexArray(circleVAO);
 
@@ -1429,6 +1451,7 @@ void processInput(GLFWwindow* window) {
         glm::vec3(0.0f, 1.0f, 0.0f)
     );
     renderer->setViewMatrix(newView);
+    renderer->updateCameraPosition(cameraPosition);
 
     //zoom 
     double mouseX, mouseY;
@@ -1454,6 +1477,7 @@ void processInput(GLFWwindow* window) {
             glm::vec3(0.0f, 1.0f, 0.0f)
         );
         renderer->setViewMatrix(newView);
+        renderer->updateCameraPosition(cameraPosition);
     }
 }
 
@@ -1500,6 +1524,7 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
         glm::vec3(0.0f, 1.0f, 0.0f)
     );
     renderer->setViewMatrix(newView);
+    renderer->updateCameraPosition(cameraPosition);
 }
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
     if (action == GLFW_PRESS) {
@@ -1846,6 +1871,7 @@ int main() {
     renderer->loadTextures();
     lastTime = glfwGetTime();
     lastFPSUpdate = lastTime;
+    renderer->updateCameraPosition(cameraPosition);
 
     while (!glfwWindowShouldClose(window)) {
         double currentFrame = glfwGetTime();
